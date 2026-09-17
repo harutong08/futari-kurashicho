@@ -407,6 +407,8 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 const TOKEN_KEY = "futari.token";
+const PASS_KEY = "futari.pass";
+const KDF_ITER = 200000;
 
 let token = "";
 let mode = "local";          /* local（この端末だけ）/ readonly（見るだけ）/ github（2人で同期） */
@@ -420,6 +422,10 @@ let syncedIds = new Set();   /* GitHub側にあると分かっている支出の
 let deletedIds = new Set();  /* この端末で消した支出のid（復活を防ぐ） */
 let lastNudge = 0;
 let connectErr = "";   /* つなげなかった理由。カードに出したままにする */
+let pass = "";         /* 合言葉。この端末にだけ置く */
+let cryptoSalt = null; /* 鍵づくりに使う塩。合言葉ごとに1つで、保存ファイルに載る */
+let cryptoKey = null;  /* 導き出した鍵の控え（毎回作ると遅いため） */
+let locked = false;    /* GitHub側が暗号化されていて、開けていない状態 */
 
 function b64enc(str){
   const b=new TextEncoder().encode(str); let s=""; const CH=0x8000;
@@ -472,24 +478,78 @@ async function ghPut(key, data, curSha, message){
 
 /* 見るだけの状態（GitHub側にデータはあるがトークンがない）でだけ入力を止める。
    まだ同期していない端末では、これまでどおりブラウザに保存する。 */
-function canWrite(){ return mode!=="readonly"; }
+/* ===== 合言葉による暗号化 =====
+   ブラウザ標準の WebCrypto を使う。合言葉から PBKDF2(SHA-256, 20万回) で鍵を作り、
+   AES-GCM で本文を包む。GitHubに置かれるのは下の封筒だけなので、
+   合言葉を知らない人にはただの文字列にしか見えない。
+   塩は合言葉ごとに1つ作って使い回す（毎回変えると鍵の作り直しで遅くなるため）。
+   IVは保存のたびに新しく作る（これがAES-GCMで大事な方）。 */
+function isEnc(d){ return !!(d && typeof d==="object" && d.enc==="aes-gcm" && d.data); }
+function b64bytes(b64){ const bin=atob(String(b64||"")); const a=new Uint8Array(bin.length); for(let i=0;i<bin.length;i++) a[i]=bin.charCodeAt(i); return a; }
+function bytesB64(a){ let s=""; const CH=0x8000; for(let i=0;i<a.length;i+=CH) s+=String.fromCharCode.apply(null,a.subarray(i,i+CH)); return btoa(s); }
+async function deriveKey(p, salt){
+  const base=await crypto.subtle.importKey("raw", new TextEncoder().encode(p), "PBKDF2", false, ["deriveKey"]);
+  return crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:KDF_ITER, hash:"SHA-256"}, base,
+    {name:"AES-GCM", length:256}, false, ["encrypt","decrypt"]);
+}
+async function keyFor(salt){
+  const tag=bytesB64(salt);
+  if (cryptoKey && cryptoKey.tag===tag && cryptoKey.pass===pass) return cryptoKey.key;
+  const key=await deriveKey(pass, salt);
+  cryptoKey={tag, pass, key};
+  return key;
+}
+async function seal(value){
+  if (!pass) return value;
+  if (!cryptoSalt) cryptoSalt=crypto.getRandomValues(new Uint8Array(16));
+  const key=await keyFor(cryptoSalt);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const ct=await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(value)));
+  return {v:1, enc:"aes-gcm", kdf:"pbkdf2-sha256", iter:KDF_ITER,
+          salt:bytesB64(cryptoSalt), iv:bytesB64(iv), data:bytesB64(new Uint8Array(ct))};
+}
+/* 開けたら中身を返す。合言葉が無い・違うときは undefined を返して locked を立てる */
+async function open(d){
+  if (!isEnc(d)) return d;
+  if (!pass){ locked=true; return undefined; }
+  try{
+    const salt=b64bytes(d.salt);
+    const key=await keyFor(salt);
+    const pt=await crypto.subtle.decrypt({name:"AES-GCM", iv:b64bytes(d.iv)}, key, b64bytes(d.data));
+    cryptoSalt=salt;
+    return JSON.parse(new TextDecoder().decode(pt));
+  }catch(e){ locked=true; return undefined; }
+}
+async function canOpen(d, p){
+  if (!isEnc(d)) return true;
+  try{
+    const salt=b64bytes(d.salt);
+    const base=await crypto.subtle.importKey("raw", new TextEncoder().encode(p), "PBKDF2", false, ["deriveKey"]);
+    const key=await crypto.subtle.deriveKey({name:"PBKDF2", salt, iterations:+d.iter||KDF_ITER, hash:"SHA-256"}, base,
+      {name:"AES-GCM", length:256}, false, ["decrypt"]);
+    await crypto.subtle.decrypt({name:"AES-GCM", iv:b64bytes(d.iv)}, key, b64bytes(d.data));
+    return true;
+  }catch(e){ return false; }
+}
+
+function canWrite(){ return mode!=="readonly" && !locked; }
 
 /* 招待リンク（…/#t=github_pat_…）からトークンを受け取る。
    「#」より後ろはサーバーに送られないので、GitHub Pages のログにも残らない。
    受け取ったら即座にアドレス欄から消して、履歴にも残さない。 */
 function takeInviteToken(){
-  let t="";
+  const out={token:"", pass:""};
   try{
-    const m=/(?:^#|[#&])t=([^&]+)/.exec(location.hash||"");
-    if (m){
-      t=decodeURIComponent(m[1]).trim();
-      history.replaceState(null, "", location.pathname+location.search);
-    }
+    const h=location.hash||"";
+    const t=/(?:^#|[#&])t=([^&]+)/.exec(h), k=/(?:^#|[#&])k=([^&]+)/.exec(h);
+    if (t) out.token=decodeURIComponent(t[1]).trim();
+    if (k) out.pass=decodeURIComponent(k[1]);
+    if (t||k) history.replaceState(null, "", location.pathname+location.search);
   }catch(e){}
-  return t;
+  return out;
 }
 function inviteUrl(){
-  return location.origin+location.pathname+"#t="+encodeURIComponent(token);
+  return location.origin+location.pathname+"#t="+encodeURIComponent(token)+(pass? "&k="+encodeURIComponent(pass) : "");
 }
 function nudge(){
   const now=Date.now(); if (now-lastNudge < 20000) return; lastNudge=now; toast(READONLY_MSG);
@@ -498,10 +558,11 @@ function markDirty(){ localDirty=true; setSync(); nudge(); }
 
 function setSync(){
   const el=$("#sync"); if(!el) return;
-  el.classList.toggle("on", mode==="github" && !lastErr);
-  const txt = lastErr ? lastErr
+  el.classList.toggle("on", mode==="github" && !lastErr && !locked);
+  const txt = locked ? "合言葉まち"
+    : lastErr ? lastErr
     : busy ? "保存中…"
-    : mode==="github" ? "2人で同期中"
+    : mode==="github" ? (pass? "2人で同期中（暗号化）" : "2人で同期中")
     : mode==="readonly" ? (localDirty? "見るだけ・変更は未保存" : "見るだけ（保存はしていません）")
     : "この端末だけに保存";
   const s=el.querySelector("span"); if(s) s.textContent=txt;
@@ -537,7 +598,7 @@ async function pushSettings(){
   busy++; setSync();
   try{
     for (let i=0;i<3;i++){
-      const r=await ghPut("settings", data, sha.settings, "家計：設定を更新");
+      const r=await ghPut("settings", await seal(data), sha.settings, "家計：設定を更新");
       if (r.conflict){ const g=await ghGet("settings"); sha.settings=g.sha; continue; }
       sha.settings=r.sha; pushed.settings=json; lastErr=""; break;
     }
@@ -560,11 +621,13 @@ async function pushExpenses(){
   try{
     for (let i=0;i<3;i++){
       const g=await ghGet("expenses");
-      const remote=(!g.missing && Array.isArray(g.data))? g.data : [];
+      const opened=g.missing? [] : await open(g.data);
+      if (opened===undefined){ lastErr="合言葉が合いません"; break; }
+      const remote=Array.isArray(opened)? opened : [];
       const merged=mergeExp(remote, expenses);
       const json=JSON.stringify(merged);
       if (!g.missing && json===pushed.expenses){ sha.expenses=g.sha; break; }
-      const r=await ghPut("expenses", merged, g.sha, "家計：家計簿を更新");
+      const r=await ghPut("expenses", await seal(merged), g.sha, "家計：家計簿を更新");
       if (r.conflict) continue;
       sha.expenses=r.sha; pushed.expenses=json; lastErr="";
       expenses=merged; syncedIds=new Set(merged.map(e=>e.id));
@@ -602,9 +665,10 @@ async function pull(){
     const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
     lastErr="";
     let changed=false;
-    if (gs.missing){ sha.settings=null; } else { sha.settings=gs.sha; if(gs.data) changed=adoptSettings(gs.data)||changed; }
-    if (ge.missing){ sha.expenses=null; syncedIds=new Set(); } else { sha.expenses=ge.sha; changed=adoptExpenses(ge.data)||changed; }
-    if (changed && !editing()) render();
+    const wasLocked=locked;
+    if (gs.missing){ sha.settings=null; } else { sha.settings=gs.sha; const v=await open(gs.data); if(v) changed=adoptSettings(v)||changed; }
+    if (ge.missing){ sha.expenses=null; syncedIds=new Set(); } else { sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) changed=adoptExpenses(v)||changed; }
+    if ((changed || locked!==wasLocked) && !editing()) render();
   }catch(e){ lastErr=e.message; }
   setSync();
 }
@@ -625,13 +689,15 @@ async function ghConnect(tk){
     const info=await r.json();
     if (info.permissions && info.permissions.push===false) throw new Error("このトークンには書き込みの権限がありません");
     const gs=await ghGet("settings");
-    if (!gs.missing && gs.data){
+    const gsv=gs.missing? null : await open(gs.data);
+    if (gsv===undefined) throw new Error("GitHub側は合言葉で暗号化されています。つないだあとに合言葉を入れてください");
+    if (gsv){
       const remoteFirst = confirm("GitHubに保存されている内容を読み込みますか？\n\nOK：GitHub側の内容にそろえる\nキャンセル：この端末の内容でGitHub側を上書きする");
-      if (remoteFirst){ sha.settings=gs.sha; S=normalize(clone(gs.data)); pushed.settings=JSON.stringify(S); saveLocalSettings(); }
+      if (remoteFirst){ sha.settings=gs.sha; S=normalize(clone(gsv)); pushed.settings=JSON.stringify(S); saveLocalSettings(); }
       else { sha.settings=gs.sha; pushed.settings=null; }
-    } else { sha.settings=null; pushed.settings=null; }
+    } else { sha.settings=gs.missing? null : gs.sha; pushed.settings=null; }
     const ge=await ghGet("expenses");
-    if (!ge.missing){ sha.expenses=ge.sha; adoptExpenses(ge.data); } else { sha.expenses=null; syncedIds=new Set(); }
+    if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) adoptExpenses(v); } else { sha.expenses=null; syncedIds=new Set(); }
     try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
     mode="github"; localDirty=false; lastErr=""; connectErr="";
     busy--; setSync();
@@ -648,27 +714,32 @@ async function ghConnect(tk){
 function ghDisconnect(){
   if (!confirm("この端末のトークンを消して、同期をやめますか？（GitHub側のデータはそのまま残ります）")) return;
   token=""; try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+  if (pass && confirm("合言葉もこの端末から消しますか？（消すと、次に開いたときに入れ直しになります）")){
+    pass=""; cryptoKey=null; cryptoSalt=null; try{ localStorage.removeItem(PASS_KEY); }catch(e){}
+  }
   mode = sha.settings || sha.expenses ? "readonly" : "local";
   localDirty=false; lastErr=""; startPoll(); setSync(); render(); toast("同期をやめました");
 }
 
 async function boot(){
   const invite=takeInviteToken();
-  try{ token=invite||(localStorage.getItem(TOKEN_KEY)||"").trim(); }catch(e){ token=invite; }
-  if (invite){ try{ localStorage.setItem(TOKEN_KEY, invite); }catch(e){} }
+  try{ token=invite.token||(localStorage.getItem(TOKEN_KEY)||"").trim(); }catch(e){ token=invite.token; }
+  try{ pass=invite.pass||(localStorage.getItem(PASS_KEY)||""); }catch(e){ pass=invite.pass; }
+  if (invite.token){ try{ localStorage.setItem(TOKEN_KEY, invite.token); }catch(e){} }
+  if (invite.pass){ try{ localStorage.setItem(PASS_KEY, invite.pass); }catch(e){} }
   loadLocal(); setSync(); render();
   try{
     const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
     if (gs.missing && ge.missing && !token){ mode="local"; setSync(); return; }
     mode = token ? "github" : "readonly";
-    if (!gs.missing){ sha.settings=gs.sha; if(gs.data) adoptSettings(gs.data); }
-    if (!ge.missing){ sha.expenses=ge.sha; adoptExpenses(ge.data); }
+    if (!gs.missing){ sha.settings=gs.sha; const v=await open(gs.data); if(v) adoptSettings(v); }
+    if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) adoptExpenses(v); }
     render(); setSync(); startPoll();
-    if (invite && mode==="github") toast("招待リンクからつなぎました");
-    if (mode==="github"){ await pushSettings(); if(expenses.length) await pushExpenses(); }
+    if (invite.token && mode==="github" && !locked) toast("招待リンクからつなぎました");
+    if (mode==="github" && !locked){ await pushSettings(); if(expenses.length) await pushExpenses(); }
   }catch(e){
     mode="local"; lastErr=e.message; setSync();
-    if (invite){ try{ localStorage.removeItem(TOKEN_KEY); }catch(e2){} }
+    if (invite.token){ try{ localStorage.removeItem(TOKEN_KEY); }catch(e2){} }
     if (token) toast("GitHubにつなげませんでした："+e.message);
   }
 }
@@ -676,6 +747,17 @@ document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) pull();
 window.addEventListener("focus", ()=>{ pull(); });
 
 /* ---------- 描画ヘルパー ---------- */
+function lockCard(){
+  return `<div class="grid"><section class="card s12" style="max-width:520px;margin:32px auto">
+    <h2>合言葉を入れてください</h2>
+    <p class="sub">このページの中身は2人で決めた合言葉で暗号化されています。合言葉を知らない人には、GitHub上でもただの文字列にしか見えません。</p>
+    <form id="lockForm" class="stack" style="gap:10px" autocomplete="off">
+      <label class="fld">合言葉<input class="in" type="password" id="passIn" autocomplete="current-password" placeholder="2人で決めた合言葉"></label>
+      <button class="btn primary" type="submit">開く</button>
+    </form>
+    <p class="note">合言葉は各自のブラウザにだけ覚えます。忘れると、これまでのデータは誰にも読めません（作り直しになります）。</p>
+  </section></div>`;
+}
 function syncCard(){
   const st = mode==="github" ? {pill:"good", t:"2人で同期中"}
     : mode==="readonly" ? {pill:"warn", t:"見るだけ（保存はされません）"}
@@ -687,8 +769,19 @@ function syncCard(){
       <div class="row"><button class="btn primary small" data-act="ghInvite">相手用の招待リンクをコピー</button>
         <button class="btn small" data-act="ghSync">今すぐ読み込む</button>
         <button class="btn small" data-act="ghDisconnect">この端末の接続をやめる</button></div>
+      <div class="group" style="padding-top:12px">
+        <div class="ghead" style="margin-bottom:8px"><h3>合言葉（暗号化）</h3>
+          <span class="pill ${pass?"good":"neutral"}">${pass? "かかっています" : "かかっていません"}</span></div>
+        ${pass
+          ? `<p class="note" style="margin:0 0 8px">家計・家計簿の中身は暗号化して保存されています。GitHub上では読めません。</p>
+             <div class="row"><button class="btn small" data-act="passChange">合言葉を変える</button>
+               <button class="btn small" data-act="passClear">暗号化をやめる</button></div>`
+          : `<p class="note" style="margin:0 0 8px">合言葉をかけると、GitHub上のデータが2人にしか読めなくなります。
+             このリポジトリは公開なので、かけておくことをおすすめします。</p>
+             <button class="btn primary small" data-act="passSet">合言葉をかける</button>`}
+      </div>
       <div class="callout warn" style="font-size:13px"><b>招待リンクの扱い</b><br>
-        リンクにはトークンが入っています。開いた人は誰でも家計を書き換えられるので、
+        リンクにはトークン${pass? "と合言葉" : ""}が入っています。開いた人は誰でも家計を読み書きできるので、
         相手に直接送るだけにして、SNSや共有アルバムには貼らないでください。
         間違って広まったら、GitHubでトークンを取り消せば無効になります。</div>`
     : `<p style="margin:0">GitHubのトークンを貼り付けると、2人で同じデータを見られるようになります。
@@ -1077,7 +1170,9 @@ function render(){
   $("#nameA").textContent=S.names[0]; $("#nameB").textContent=S.names[1];
   $("#dotA").textContent=(S.names[0]||"A").slice(0,1); $("#dotB").textContent=(S.names[1]||"B").slice(0,1);
   document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===tab));
-  const v=$("#view");
+  const v=$("#view"), nav=document.querySelector("nav.tabs");
+  if (nav) nav.style.display = locked? "none" : "";
+  if (locked){ v.innerHTML=lockCard(); return; }
   v.innerHTML = tab==="home"?viewHome(): tab==="initial"?viewInitial(): tab==="budget"?viewBudget(): viewLog();
 }
 
@@ -1113,6 +1208,32 @@ document.addEventListener("click", async e=>{
     deletedIds.add(id); expenses=expenses.filter(x=>x.id!==id); saveExpensesSoon(); render(); toast("削除しました"); }
   if (act==="ghConnect"){ const el=$("#ghToken"); const v=el?el.value:""; if(el) el.value=""; await ghConnect(v); return; }
   if (act==="ghDisconnect"){ ghDisconnect(); return; }
+  if (act==="passSet" || act==="passChange"){
+    if (!canWrite()){ nudge(); return; }
+    const p1=window.prompt(act==="passSet"
+      ? "2人で決める合言葉を入れてください。\n\n忘れると、これまでのデータは誰にも読めなくなります。"
+      : "新しい合言葉を入れてください。");
+    if (p1===null) return;
+    const v1=String(p1);
+    if (v1.length<4){ alert("合言葉は4文字以上にしてください。"); return; }
+    const p2=window.prompt("確認のため、もう一度同じ合言葉を入れてください。");
+    if (p2===null) return;
+    if (String(p2)!==v1){ alert("2回目が一致しませんでした。もう一度お試しください。"); return; }
+    pass=v1; cryptoSalt=null; cryptoKey=null;
+    try{ localStorage.setItem(PASS_KEY, pass); }catch(err){}
+    pushed.settings=null; pushed.expenses=null;
+    await pushSettings(); await pushExpenses();
+    render(); toast("合言葉をかけました。相手にも同じ合言葉を伝えてください");
+    return; }
+  if (act==="passClear"){
+    if (!canWrite()){ nudge(); return; }
+    if (!confirm("暗号化をやめますか？\n\nやめると、家計と家計簿の中身がGitHub上で誰にでも読める状態に戻ります。")) return;
+    pass=""; cryptoSalt=null; cryptoKey=null;
+    try{ localStorage.removeItem(PASS_KEY); }catch(err){}
+    pushed.settings=null; pushed.expenses=null;
+    await pushSettings(); await pushExpenses();
+    render(); toast("暗号化をやめました");
+    return; }
   if (act==="ghInvite"){
     if (!canWrite()){ nudge(); return; }
     const url=inviteUrl();
@@ -1163,6 +1284,18 @@ document.addEventListener("change", e=>{
 document.addEventListener("focusout", ()=>{ setTimeout(()=>{ if(pending && !editing()){ S=pending; pending=null; render(); } }, 60); });
 
 document.addEventListener("submit", async e=>{
+  if (e.target.id==="lockForm"){
+    e.preventDefault();
+    const v=$("#passIn").value;
+    if (!v) return;
+    const g=await ghGet("settings").catch(()=>null);
+    if (!g || g.missing){ toast("GitHubのデータが読めませんでした"); return; }
+    if (!(await canOpen(g.data, v))){ toast("合言葉が違います"); return; }
+    pass=v; cryptoKey=null; locked=false;
+    try{ localStorage.setItem(PASS_KEY, pass); }catch(err){}
+    await pull(); render(); toast("開きました");
+    return;
+  }
   if (e.target.id!=="expForm") return; e.preventDefault();
   const amount=Math.round(+$("#e-amount").value||0); if(amount<=0){ toast("金額を入力してください"); return; }
   const pb=document.querySelector('#e-payer [aria-pressed="true"]'); const pv=pb?pb.dataset.payer:"0";

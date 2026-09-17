@@ -186,6 +186,51 @@ await run('未接続では招待リンクなし', {files:{settings:null, expense
   ok(await page.locator('[data-act="ghInvite"]').count()===0, 'コピーのボタンは出ない');
 });
 
+// 9〜12) 合言葉による暗号化
+const PASS = 'ふたりの合言葉2026';
+let encFiles = null;
+
+await run('合言葉をかける', {files:{settings:null, expenses:null}, token:'github_pat_owner'}, async (page,{puts,files})=>{
+  const answers = [PASS, PASS];
+  page.on('dialog', d=>d.accept(answers.shift() ?? ''));
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="passSet"]'); await page.waitForTimeout(1500);
+  const st = puts.filter(p=>p.key==='settings').pop();
+  ok(st && st.data.enc==='aes-gcm', 'GitHubには暗号化して書き込む');
+  ok(!JSON.stringify(st.data).includes('あなた'), '平文の中身が残っていない');
+  ok(!JSON.stringify(st.data).includes('70000'), '金額も読み取れない');
+  ok(typeof st.data.salt==='string' && typeof st.data.iv==='string', '塩とIVが付いている');
+  const ex = puts.filter(p=>p.key==='expenses').pop();
+  ok(ex && ex.data.enc==='aes-gcm', '家計簿も暗号化する');
+  ok((await page.textContent('#sync')).includes('暗号化'), '右上に暗号化中と出る');
+  encFiles = {settings: files.settings, expenses: files.expenses};
+});
+
+await run('合言葉なしでは開けない', {files:{...encFiles}}, async (page,{puts})=>{
+  ok((await page.textContent('#view')).includes('合言葉を入れてください'), '合言葉の画面になる');
+  ok(await page.locator('nav.tabs').isHidden(), 'タブが隠れる');
+  ok(!(await page.textContent('#view')).includes('ふたり暮らしの生活費'), '中身が表示されない');
+  ok((await page.textContent('#sync')).includes('合言葉まち'), '右上は合言葉まち');
+  ok(puts.length===0, '書き込みもしない');
+});
+
+await run('合言葉を入れると開く', {files:{...encFiles}}, async (page)=>{
+  await page.fill('#passIn', 'ちがう合言葉');
+  await page.click('#lockForm button[type=submit]'); await page.waitForTimeout(700);
+  ok((await page.textContent('#toast')).includes('合言葉が違います'), '違う合言葉は弾く');
+  ok((await page.textContent('#view')).includes('合言葉を入れてください'), 'まだ開かない');
+  await page.fill('#passIn', PASS);
+  await page.click('#lockForm button[type=submit]'); await page.waitForTimeout(1200);
+  ok(!(await page.textContent('#view')).includes('合言葉を入れてください'), '正しい合言葉で開く');
+  ok((await page.textContent('#view')).includes('ふたり暮らしの生活費'), '中身が見える');
+});
+
+await run('招待リンクに合言葉も入る', {files:{...encFiles}, hash:'#t=github_pat_invited&k='+encodeURIComponent(PASS)}, async (page)=>{
+  ok(!(await page.textContent('#view')).includes('合言葉を入れてください'), 'そのまま開く');
+  ok((await page.textContent('#sync')).includes('2人で同期中（暗号化）'), '暗号化したまま同期する');
+  ok(!page.url().includes(encodeURIComponent(PASS)), 'アドレス欄から合言葉が消えている');
+});
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);
