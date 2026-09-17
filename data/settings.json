@@ -8,7 +8,7 @@
   200000,
   165000
  ],
- "incomeType": "gross",
+ "incomeType": "net",
  "area": "matsumoto",
  "split": "ratio",
  "fixed": [
@@ -290,7 +290,7 @@
     "label": "夏のボーナス",
     "m": 6,
     "amt": [
-     200000,
+     0,
      150000
     ]
    },
@@ -299,7 +299,7 @@
     "label": "冬のボーナス",
     "m": 12,
     "amt": [
-     200000,
+     0,
      150000
     ]
    }
