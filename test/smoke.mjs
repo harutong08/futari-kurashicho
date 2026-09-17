@@ -24,9 +24,14 @@ const browser = await chromium.launch(SYS ? {executablePath:SYS} : {});
 
 async function run(name, {files, token, repoStatus}, body){
   const ctx = await browser.newContext();
-  const puts = [];
+  const puts = [], urls = [];
+  /* 余計な末尾スラッシュ（/repos/owner/repo/）は、本物のGitHubなら 400 かつCORSヘッダ無しで返る。
+     ブラウザからは「Failed to fetch」としか見えない事故を再現するため、ここでも同じ扱いにする */
+  const STRAY_SLASH = /\/repos\/[^/]+\/[^/]+\/(\?|$)/;
   await ctx.route('https://api.github.com/**', route=>{
     const req = route.request(), u = req.url(), m = req.method();
+    urls.push(m+' '+u);
+    if (STRAY_SLASH.test(u)) return route.fulfill({status:400, body:'{"message":"Bad Request"}'});
     if (m==='OPTIONS') return route.fulfill({status:204, headers:CORS});
     if (m==='PUT'){ const key = u.includes('settings')?'settings':'expenses';
       const b = JSON.parse(req.postData()||'{}');
@@ -51,7 +56,8 @@ async function run(name, {files, token, repoStatus}, body){
   await page.waitForTimeout(900);
   console.log('\n['+name+']');
   ok(errs.length===0, 'JSエラーなし '+(errs[0]||''));
-  await body(page, {puts, files, errs});
+  await body(page, {puts, files, errs, urls});
+  ok(!urls.some(u=>STRAY_SLASH.test(u)), 'APIのURLに余計な末尾スラッシュがない');
   await ctx.close();
 }
 

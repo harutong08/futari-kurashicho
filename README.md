@@ -64,7 +64,7 @@ Settings → Pages → Source: **Deploy from a branch** → **main** / **/ (root
 
 ```bash
 npm install   # 初回のみ（Playwright）
-npm test      # 実ブラウザ(Chromium)で33項目
+npm test      # 実ブラウザ(Chromium)で38項目
 ```
 
 GitHub API は差し替えてあるので、テストはネットワークに出ないし、本物のリポジトリも書き換えない。
