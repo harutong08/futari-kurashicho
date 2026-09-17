@@ -22,8 +22,8 @@ const ok = (c,m)=>{ console.log((c?'  ok  ':'  NG  ')+m); if(!c) fail++; };
 
 const browser = await chromium.launch(SYS ? {executablePath:SYS} : {});
 
-async function run(name, {files, token, repoStatus}, body){
-  const ctx = await browser.newContext();
+async function run(name, {files, token, repoStatus, hash, clipboard}, body){
+  const ctx = await browser.newContext(clipboard ? {permissions:['clipboard-read','clipboard-write']} : {});
   const puts = [], urls = [];
   /* 余計な末尾スラッシュ（/repos/owner/repo/）は、本物のGitHubなら 400 かつCORSヘッダ無しで返る。
      ブラウザからは「Failed to fetch」としか見えない事故を再現するため、ここでも同じ扱いにする */
@@ -52,7 +52,7 @@ async function run(name, {files, token, repoStatus}, body){
   page.on('pageerror', e=>errs.push(String(e)));
   page.on('console', m=>{ const t=m.text(); if(m.type()==='error' && !/ERR_CERT|fonts\.(googleapis|gstatic)|api\.github\.com|404 \(Not Found\)/.test(t+' '+(m.location()||{}).url)) errs.push('console: '+t); });
   if (token) await page.addInitScript(t=>localStorage.setItem('futari.token',t), token);
-  await page.goto(url);
+  await page.goto(url + (hash||''));
   await page.waitForTimeout(900);
   console.log('\n['+name+']');
   ok(errs.length===0, 'JSエラーなし '+(errs[0]||''));
@@ -150,6 +150,40 @@ await run('つなげないとき', {files:{settings:null, expenses:null}, repoSt
   ok(card.includes('つなげませんでした') && card.includes('Repository access'), '画面にも理由が残る');
   ok(puts.length===0, '書き込みは試みない');
   ok((await page.textContent('#sync')).includes('この端末だけ'), '状態は変わらない');
+});
+
+// 6) 招待リンク（#t=…）で開くと、そのままつながる
+const seeded2 = {
+  settings:{v:1, names:["ひろ","なつ"], incomes:[200000,150000], incomeType:"net", area:"matsumoto", split:"ratio", fixed:[130000,100000],
+    budget:[{id:"rent",g:"home",label:"家賃",amt:70000}], initial:[], savings:{current:0, monthly:[60000,40000], cushion:true, moveIn:"2027-06", bonuses:[], overrides:{}}},
+  expenses:[]
+};
+await run('招待リンクで開く', {files:seeded2, hash:'#t=github_pat_invited'}, async (page,{puts})=>{
+  ok((await page.textContent('#sync')).includes('2人で同期中'), '表示：2人で同期中');
+  ok((await page.textContent('#nameA'))==='ひろ', 'GitHub側の設定を読み込む');
+  ok(!page.url().includes('github_pat'), 'アドレス欄からトークンが消えている');
+  ok(await page.evaluate(()=>localStorage.getItem('futari.token'))==='github_pat_invited', 'この端末に覚えている');
+  await page.click('[data-tab="log"]'); await page.waitForTimeout(150);
+  await page.fill('#e-amount','1500'); await page.click('#expForm button[type=submit]');
+  await page.waitForTimeout(1800);
+  ok(puts.some(p=>p.key==='expenses'), '招待された側も書き込める');
+});
+
+// 7) つないだ端末は、相手に渡すリンクを作れる
+await run('招待リンクを作る', {files:{settings:null, expenses:null}, token:'github_pat_owner', clipboard:true}, async (page)=>{
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  ok(await page.locator('[data-act="ghInvite"]').isVisible(), 'コピーのボタンが出る');
+  await page.click('[data-act="ghInvite"]'); await page.waitForTimeout(300);
+  const link = await page.evaluate(()=>navigator.clipboard.readText());
+  ok(link.includes('#t=github_pat_owner'), 'リンクにトークンが入っている');
+  ok(link.indexOf('#') > link.indexOf('//127.0.0.1'), 'トークンは # より後ろ（サーバーに送られない）');
+  ok((await page.textContent('#toast')).includes('コピーしました'), 'コピーしたと知らせる');
+});
+
+// 8) 未接続の端末では招待リンクを作れない
+await run('未接続では招待リンクなし', {files:{settings:null, expenses:null}}, async (page)=>{
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  ok(await page.locator('[data-act="ghInvite"]').count()===0, 'コピーのボタンは出ない');
 });
 
 await browser.close(); srv.close();

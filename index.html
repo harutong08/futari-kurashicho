@@ -471,6 +471,24 @@ async function ghPut(key, data, curSha, message){
 /* 見るだけの状態（GitHub側にデータはあるがトークンがない）でだけ入力を止める。
    まだ同期していない端末では、これまでどおりブラウザに保存する。 */
 function canWrite(){ return mode!=="readonly"; }
+
+/* 招待リンク（…/#t=github_pat_…）からトークンを受け取る。
+   「#」より後ろはサーバーに送られないので、GitHub Pages のログにも残らない。
+   受け取ったら即座にアドレス欄から消して、履歴にも残さない。 */
+function takeInviteToken(){
+  let t="";
+  try{
+    const m=/(?:^#|[#&])t=([^&]+)/.exec(location.hash||"");
+    if (m){
+      t=decodeURIComponent(m[1]).trim();
+      history.replaceState(null, "", location.pathname+location.search);
+    }
+  }catch(e){}
+  return t;
+}
+function inviteUrl(){
+  return location.origin+location.pathname+"#t="+encodeURIComponent(token);
+}
 function nudge(){
   const now=Date.now(); if (now-lastNudge < 20000) return; lastNudge=now; toast(READONLY_MSG);
 }
@@ -633,7 +651,9 @@ function ghDisconnect(){
 }
 
 async function boot(){
-  try{ token=(localStorage.getItem(TOKEN_KEY)||"").trim(); }catch(e){ token=""; }
+  const invite=takeInviteToken();
+  try{ token=invite||(localStorage.getItem(TOKEN_KEY)||"").trim(); }catch(e){ token=invite; }
+  if (invite){ try{ localStorage.setItem(TOKEN_KEY, invite); }catch(e){} }
   loadLocal(); setSync(); render();
   try{
     const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
@@ -642,9 +662,11 @@ async function boot(){
     if (!gs.missing){ sha.settings=gs.sha; if(gs.data) adoptSettings(gs.data); }
     if (!ge.missing){ sha.expenses=ge.sha; adoptExpenses(ge.data); }
     render(); setSync(); startPoll();
+    if (invite && mode==="github") toast("招待リンクからつなぎました");
     if (mode==="github"){ await pushSettings(); if(expenses.length) await pushExpenses(); }
   }catch(e){
     mode="local"; lastErr=e.message; setSync();
+    if (invite){ try{ localStorage.removeItem(TOKEN_KEY); }catch(e2){} }
     if (token) toast("GitHubにつなげませんでした："+e.message);
   }
 }
@@ -660,8 +682,13 @@ function syncCard(){
     ? `<p style="margin:0">この端末はGitHubにつながっています。入力するたびに
         <code>${GH.paths.settings}</code> と <code>${GH.paths.expenses}</code> が更新され、
         もう1人の画面にも30秒ほどで反映されます。</p>
-      <div class="row"><button class="btn small" data-act="ghSync">今すぐ読み込む</button>
-        <button class="btn small" data-act="ghDisconnect">この端末の接続をやめる</button></div>`
+      <div class="row"><button class="btn primary small" data-act="ghInvite">相手用の招待リンクをコピー</button>
+        <button class="btn small" data-act="ghSync">今すぐ読み込む</button>
+        <button class="btn small" data-act="ghDisconnect">この端末の接続をやめる</button></div>
+      <div class="callout warn" style="font-size:13px"><b>招待リンクの扱い</b><br>
+        リンクにはトークンが入っています。開いた人は誰でも家計を書き換えられるので、
+        相手に直接送るだけにして、SNSや共有アルバムには貼らないでください。
+        間違って広まったら、GitHubでトークンを取り消せば無効になります。</div>`
     : `<p style="margin:0">GitHubのトークンを貼り付けると、2人で同じデータを見られるようになります。
         トークンはこの端末のブラウザにだけ保存され、サイトには書き込まれません。</p>
       <div class="row" style="flex-wrap:nowrap;gap:8px">
@@ -1084,6 +1111,12 @@ document.addEventListener("click", async e=>{
     deletedIds.add(id); expenses=expenses.filter(x=>x.id!==id); saveExpensesSoon(); render(); toast("削除しました"); }
   if (act==="ghConnect"){ const el=$("#ghToken"); const v=el?el.value:""; if(el) el.value=""; await ghConnect(v); return; }
   if (act==="ghDisconnect"){ ghDisconnect(); return; }
+  if (act==="ghInvite"){
+    if (!canWrite()){ nudge(); return; }
+    const url=inviteUrl();
+    try{ await navigator.clipboard.writeText(url); toast("招待リンクをコピーしました"); }
+    catch(err){ window.prompt("このリンクをコピーして相手に送ってください", url); }
+    return; }
   if (act==="ghSync"){ await pull(); render(); toast("読み込みました"); return; }
   if (act==="export"){ const txt=JSON.stringify({settings:S, expenses}); $("#backup").value=txt;
     try{ await navigator.clipboard.writeText(txt); toast("コピーしました"); }catch(err){ $("#backup").select(); toast("テキストを選択しました。コピーして保存してください"); } }
