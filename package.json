@@ -1,0 +1,13 @@
+{
+  "name": "futari-kurashicho",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "ふたりの信州暮らし帳 — 同棲の家計ダッシュボード",
+  "scripts": {
+    "test": "node test/smoke.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.49.0"
+  }
+}

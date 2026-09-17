@@ -1,0 +1,1134 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>ふたりの信州暮らし帳</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
+<meta name="description" content="松本・塩尻・安曇野での同棲にかかるお金の試算と、2人で使う家計簿">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Zen+Kaku+Gothic+New:wght@400;500;700&family=Zen+Maru+Gothic:wght@500;700&display=swap">
+<style>
+:root{
+  --bg:#EDF1EF; --surface:#FFFFFF; --surface-2:#F4F7F6; --ink:#1C2A27; --muted:#5B6D68; --faint:#8A9A95;
+  --line:#D7E0DC; --accent:#2F6B5B; --accent-soft:#DCEBE5; --on-accent:#FFFFFF;
+  --pa:#4262B0; --pa-soft:#E1E8F7; --pb:#D9714A; --pb-soft:#FAE6DC;
+  --good:#2E8A58; --good-soft:#DDF0E4; --warn:#B7801F; --warn-soft:#F7ECD6; --bad:#BF4337; --bad-soft:#F8E0DD;
+  --c-home:#2F6B5B; --c-util:#D2A03A; --c-comm:#6A8ED4; --c-food:#DD7A52; --c-fun:#C35E8B; --c-life:#89A558; --c-car:#587B87; --c-other:#A69A8B;
+  --shadow:0 1px 2px rgba(28,42,39,.05),0 6px 20px -8px rgba(28,42,39,.12);
+  --f-disp:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
+  --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
+  --f-num:"Outfit","Zen Kaku Gothic New",system-ui,sans-serif;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#101715; --surface:#172220; --surface-2:#1D2A27; --ink:#E4EDEA; --muted:#98AAA5; --faint:#6F817C;
+    --line:#2A3935; --accent:#72B8A3; --accent-soft:#1F3A33; --on-accent:#0E1A17;
+    --pa:#8CA8EC; --pa-soft:#212C45; --pb:#F0A07F; --pb-soft:#3E2A22;
+    --good:#6CC48F; --good-soft:#1C3527; --warn:#E3B45A; --warn-soft:#3A2F1A; --bad:#EC7F73; --bad-soft:#3F2320;
+    --c-home:#72B8A3; --c-util:#E3B95A; --c-comm:#8FAEEA; --c-food:#EE9A76; --c-fun:#DD86AE; --c-life:#A9C47A; --c-car:#86A7B2; --c-other:#BDB2A4;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -10px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#101715; --surface:#172220; --surface-2:#1D2A27; --ink:#E4EDEA; --muted:#98AAA5; --faint:#6F817C;
+  --line:#2A3935; --accent:#72B8A3; --accent-soft:#1F3A33; --on-accent:#0E1A17;
+  --pa:#8CA8EC; --pa-soft:#212C45; --pb:#F0A07F; --pb-soft:#3E2A22;
+  --good:#6CC48F; --good-soft:#1C3527; --warn:#E3B45A; --warn-soft:#3A2F1A; --bad:#EC7F73; --bad-soft:#3F2320;
+  --c-home:#72B8A3; --c-util:#E3B95A; --c-comm:#8FAEEA; --c-food:#EE9A76; --c-fun:#DD86AE; --c-life:#A9C47A; --c-car:#86A7B2; --c-other:#BDB2A4;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -10px rgba(0,0,0,.5);
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65;padding-inline:16px;padding-block:0 64px;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1080px;margin:0 auto}
+.num{font-family:var(--f-num);font-variant-numeric:tabular-nums;letter-spacing:.01em}
+button,input,select,textarea{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+
+/* header */
+.top{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;flex-wrap:wrap;padding-block:28px 14px;position:relative}
+.brand h1{font-family:var(--f-disp);font-weight:700;font-size:clamp(22px,4vw,30px);margin:0;line-height:1.25;letter-spacing:.02em}
+.brand p{margin:2px 0 0;color:var(--muted);font-size:13px}
+.ridge{display:block;width:170px;height:26px;color:var(--accent);opacity:.55;margin-bottom:4px}
+.pair{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.who{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;font-weight:500}
+.dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700;font-family:var(--f-disp)}
+.dot.a{background:var(--pa)} .dot.b{background:var(--pb)}
+:root[data-theme="dark"] .dot{color:#0f1715}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .dot{color:#0f1715}}
+.sync{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
+.sync i{width:7px;height:7px;border-radius:50%;background:var(--faint)}
+.sync.on i{background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
+
+/* nav */
+nav.tabs{position:sticky;top:0;z-index:5;background:var(--bg);padding-block:8px 12px}
+.seg{display:flex;gap:4px;padding:4px;background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow-x:auto;scrollbar-width:none}
+.seg button{flex:1 0 auto;border:0;background:transparent;padding:9px 14px;border-radius:10px;font-weight:500;color:var(--muted);cursor:pointer;white-space:nowrap;font-size:14px}
+.seg button[aria-selected="true"]{background:var(--accent);color:var(--on-accent)}
+.seg button:not([aria-selected="true"]):hover{background:var(--surface-2);color:var(--ink)}
+
+/* layout */
+.grid{display:grid;gap:14px;grid-template-columns:repeat(12,1fr)}
+.s12{grid-column:span 12}.s8{grid-column:span 8}.s7{grid-column:span 7}.s6{grid-column:span 6}.s5{grid-column:span 5}.s4{grid-column:span 4}
+@media (max-width:860px){.s8,.s7,.s6,.s5,.s4{grid-column:span 12}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:18px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.card.flat{box-shadow:none;background:var(--surface-2)}
+.card h2{font-family:var(--f-disp);font-size:17px;font-weight:700;margin:0 0 4px;text-wrap:balance}
+.card .sub{color:var(--muted);font-size:13px;margin:0 0 14px}
+.eyebrow{font-size:11px;letter-spacing:.12em;color:var(--muted);font-weight:700}
+.stack{display:flex;flex-direction:column;gap:14px}
+.row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.between{justify-content:space-between}
+
+/* hero */
+.hero{display:grid;grid-template-columns:1.35fr 1fr;gap:20px;align-items:center}
+@media (max-width:720px){.hero{grid-template-columns:1fr}}
+.big{font-family:var(--f-num);font-weight:600;font-size:clamp(38px,7vw,56px);line-height:1;letter-spacing:-.01em}
+.big small{font-size:.38em;font-weight:500;color:var(--muted);margin-left:4px;font-family:var(--f-body)}
+.lead{margin:10px 0 0;color:var(--muted);max-width:44ch}
+.lead b{color:var(--ink);font-weight:700}
+.kv{display:grid;grid-template-columns:1fr auto;gap:8px 16px;font-size:14px}
+.kv dt{color:var(--muted)} .kv dd{margin:0;text-align:right;font-family:var(--f-num);font-weight:500;font-variant-numeric:tabular-nums}
+.kv .tot{border-top:1px solid var(--line);padding-top:8px;font-weight:700;color:var(--ink)}
+
+.pill{display:inline-flex;align-items:center;gap:6px;padding:3px 10px;border-radius:999px;font-size:12px;font-weight:700;white-space:nowrap}
+.pill.good{background:var(--good-soft);color:var(--good)} .pill.warn{background:var(--warn-soft);color:var(--warn)} .pill.bad{background:var(--bad-soft);color:var(--bad)}
+.pill.neutral{background:var(--surface-2);color:var(--muted)}
+
+.bar{height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden;border:1px solid var(--line)}
+.bar>span{display:block;height:100%;border-radius:99px;background:var(--accent)}
+.stat{display:flex;flex-direction:column;gap:2px}
+.stat .l{font-size:12px;color:var(--muted)}
+.stat .v{font-family:var(--f-num);font-weight:600;font-size:22px;font-variant-numeric:tabular-nums}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:14px}
+
+/* people split */
+.people{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.person{border-radius:14px;padding:14px;background:var(--surface-2);border:1px solid var(--line)}
+.person.a{background:var(--pa-soft);border-color:transparent} .person.b{background:var(--pb-soft);border-color:transparent}
+.person .n{font-weight:700;font-size:13px;display:flex;align-items:center;gap:6px}
+.person .v{font-family:var(--f-num);font-weight:600;font-size:22px;font-variant-numeric:tabular-nums;margin-top:4px}
+.person .m{font-size:12px;color:var(--muted)}
+
+/* donut */
+.donut{display:grid;grid-template-columns:170px 1fr;gap:18px;align-items:center}
+@media (max-width:460px){.donut{grid-template-columns:1fr;justify-items:center}}
+.legend{list-style:none;margin:0;padding:0;display:grid;gap:6px;width:100%;font-size:13px}
+.legend li{display:grid;grid-template-columns:10px 1fr auto auto;gap:8px;align-items:center}
+.legend i{width:10px;height:10px;border-radius:3px}
+.legend .p{color:var(--faint);font-family:var(--f-num);font-size:12px;width:34px;text-align:right}
+
+/* forms */
+label.fld{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted);font-weight:500;min-width:0}
+.in{width:100%;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:8px 10px;font-size:15px;min-width:0}
+.in:hover{border-color:var(--faint)}
+.in.yen{font-family:var(--f-num);font-variant-numeric:tabular-nums;text-align:right}
+.yenwrap{position:relative}
+.yenwrap::before{content:"¥";position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--faint);font-family:var(--f-num);font-size:14px;pointer-events:none}
+.yenwrap .in{padding-left:22px}
+.fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+.btn{border:1px solid var(--line);background:var(--surface);padding:8px 14px;border-radius:10px;cursor:pointer;font-weight:500;font-size:14px}
+.btn:hover{background:var(--surface-2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--on-accent)}
+.btn.primary:hover{filter:brightness(1.06)}
+.btn.ghost{border-color:transparent;background:transparent;color:var(--muted)}
+.btn.small{padding:5px 10px;font-size:13px}
+.icon{border:0;background:transparent;color:var(--faint);cursor:pointer;width:30px;height:30px;border-radius:8px;display:grid;place-items:center;font-size:16px;flex:none}
+.icon:hover{background:var(--bad-soft);color:var(--bad)}
+.choice{display:flex;gap:4px;padding:3px;background:var(--surface-2);border:1px solid var(--line);border-radius:11px;flex-wrap:wrap}
+.choice button{border:0;background:transparent;padding:6px 12px;border-radius:8px;cursor:pointer;font-size:13px;font-weight:500;color:var(--muted);flex:1 0 auto}
+.choice button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.choice button[aria-pressed="true"].pa{color:var(--pa)} .choice button[aria-pressed="true"].pb{color:var(--pb)}
+input[type=range]{width:100%;accent-color:var(--accent)}
+.toggle{display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer}
+.toggle input{width:18px;height:18px;accent-color:var(--accent)}
+
+/* item lists */
+.group{border-top:1px solid var(--line);padding-top:12px}
+.group:first-child{border-top:0;padding-top:0}
+.ghead{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px}
+.ghead h3{font-size:14px;margin:0;display:flex;align-items:center;gap:8px;font-weight:700}
+.ghead h3 i{width:10px;height:10px;border-radius:3px}
+.ghead .num{font-weight:600;color:var(--muted);font-size:14px}
+.item{display:grid;grid-template-columns:1fr 140px 30px;gap:8px;align-items:center;padding-block:4px}
+.item.chk{grid-template-columns:22px 1fr 140px 30px}
+.item.chk input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
+.item .in{padding:6px 8px;font-size:14px}
+.item.off .lbl,.item.off .yen{color:var(--faint);text-decoration:line-through}
+.hint{font-size:12px;color:var(--faint);grid-column:1/-1;margin:-4px 0 2px}
+.item.chk .hint{grid-column:2/-1}
+@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}.item.chk{grid-template-columns:22px 1fr 108px 30px}}
+
+/* table */
+.tablewrap{overflow-x:auto}
+table{width:100%;border-collapse:collapse;font-size:14px;min-width:420px}
+th,td{padding:9px 10px;text-align:right;border-bottom:1px solid var(--line);white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{font-size:12px;color:var(--muted);font-weight:500}
+td.num{font-family:var(--f-num)}
+tr.cur td{background:var(--accent-soft)}
+tr.cur td:first-child{font-weight:700}
+table.sched td{padding-block:5px}
+table.sched .in{padding:5px 8px 5px 22px;font-size:14px}
+table.sched .in.ov{background:var(--accent-soft);border-color:var(--accent);font-weight:600}
+
+/* budget vs actual */
+.bva{display:grid;gap:10px}
+.bva .r{display:grid;grid-template-columns:110px 1fr 150px;gap:10px;align-items:center;font-size:13px}
+@media (max-width:520px){.bva .r{grid-template-columns:90px 1fr;}.bva .r .amt{grid-column:2}}
+.bva .track{height:12px;border-radius:99px;background:var(--surface-2);position:relative;overflow:hidden;border:1px solid var(--line)}
+.bva .track span{position:absolute;inset:0 auto 0 0;border-radius:99px}
+.bva .amt{text-align:right;font-family:var(--f-num);font-variant-numeric:tabular-nums;color:var(--muted)}
+.bva .amt b{color:var(--ink);font-weight:600}
+.over{color:var(--bad)!important}
+
+.explist{list-style:none;margin:0;padding:0}
+.explist li{display:grid;grid-template-columns:52px 1fr auto 30px;gap:10px;align-items:center;padding:10px 0;border-bottom:1px solid var(--line)}
+.explist li:last-child{border-bottom:0}
+.explist .d{font-family:var(--f-num);color:var(--muted);font-size:13px}
+.explist .t{min-width:0}
+.explist .t b{font-weight:500;display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.explist .t small{color:var(--muted);font-size:12px;display:flex;gap:6px;align-items:center}
+.explist .t small i{width:8px;height:8px;border-radius:2px;display:inline-block}
+.explist .a{font-family:var(--f-num);font-weight:600;font-variant-numeric:tabular-nums}
+.tag{font-size:11px;padding:1px 7px;border-radius:99px;font-weight:700}
+.tag.a{background:var(--pa-soft);color:var(--pa)} .tag.b{background:var(--pb-soft);color:var(--pb)} .tag.j{background:var(--accent-soft);color:var(--accent)}
+
+.empty{padding:28px 12px;text-align:center;color:var(--muted);font-size:14px}
+.note{font-size:12px;color:var(--faint);margin:10px 0 0}
+.callout{border-radius:12px;padding:12px 14px;background:var(--accent-soft);font-size:14px}
+.callout.warn{background:var(--warn-soft)}
+.callout b{font-weight:700}
+svg text{font-family:var(--f-num)}
+.chart{width:100%;height:auto;display:block;overflow:visible}
+.toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:9px 16px;border-radius:99px;font-size:13px;z-index:20;opacity:0;transition:opacity .2s;pointer-events:none}
+.toast.show{opacity:1}
+@media (prefers-reduced-motion: reduce){.toast{transition:none}}
+textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div class="brand">
+      <svg class="ridge" viewBox="0 0 170 26" fill="none" aria-hidden="true"><path d="M1 25 L18 15 L26 18 L40 6 L50 12 L58 3 L68 11 L80 8 L92 16 L104 9 L116 14 L128 5 L140 13 L154 11 L169 25" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+      <h1>ふたりの信州暮らし帳</h1>
+      <p id="subline">松本・塩尻・安曇野で、ふたり暮らしを始めるためのお金の計画と家計簿</p>
+    </div>
+    <div class="pair">
+      <span class="who"><span class="dot a" id="dotA">A</span><span id="nameA">あなた</span></span>
+      <span class="who"><span class="dot b" id="dotB">B</span><span id="nameB">パートナー</span></span>
+      <span class="sync" id="sync"><i></i><span>読み込み中…</span></span>
+    </div>
+  </header>
+  <nav class="tabs" aria-label="画面の切り替え">
+    <div class="seg" role="tablist">
+      <button role="tab" data-tab="home" aria-selected="true">ホーム</button>
+      <button role="tab" data-tab="initial" aria-selected="false">初期費用と貯金</button>
+      <button role="tab" data-tab="budget" aria-selected="false">毎月の予算</button>
+      <button role="tab" data-tab="log" aria-selected="false">家計簿</button>
+    </div>
+  </nav>
+  <main id="view"></main>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+"use strict";
+const GROUPS = [
+  {k:"home", label:"住まい"}, {k:"util", label:"光熱費"}, {k:"comm", label:"通信"}, {k:"food", label:"食費"},
+  {k:"fun", label:"外食・デート"}, {k:"life", label:"日用品・暮らし"}, {k:"car", label:"車"}, {k:"other", label:"予備費・その他"}
+];
+const GLABEL = Object.fromEntries(GROUPS.map(g=>[g.k,g.label]));
+/* e.cat には保存ファイル由来の文字列が入る。"constructor" などを引かないよう自前のキーだけ見る */
+const glabel = k => Object.prototype.hasOwnProperty.call(GLABEL, k) ? GLABEL[k] : "";
+const IGROUPS = [
+  {k:"contract", label:"賃貸の契約時"}, {k:"move", label:"引越し"}, {k:"furniture", label:"家具・家電"},
+  {k:"winter", label:"信州の冬支度"}, {k:"spare", label:"予備"}
+];
+/* 月ごとの季節係数（1月→12月）。平均が1になるよう正規化して使う */
+const SEASON = {
+  elec:[1.45,1.45,1.25,.95,.8,.8,1.0,1.15,.9,.8,1.0,1.35],
+  gas:[1.4,1.45,1.3,1.1,.9,.75,.65,.6,.7,.85,1.05,1.3],
+  water:[.95,.95,1,1,1,1,1.05,1.1,1.05,1,.95,.95],
+  kero:[2.6,2.6,1.8,.5,0,0,0,0,0,.3,1.6,2.6]
+};
+for (const k in SEASON){ const a=SEASON[k], m=a.reduce((x,y)=>x+y,0)/12; SEASON[k]=a.map(v=>v/m); }
+
+const AREAS = {
+  matsumoto:{label:"松本市", gas:5500, gasLabel:"ガス（中心部は都市ガス物件も）", park:5000,
+    note:"2LDKの家賃相場はおよそ6〜8万円。市街地は駐車場が別料金（月4,000〜6,000円）のことが多め。冬は−5℃を下回る日もあり、暖房費が大きく増えます。"},
+  shiojiri:{label:"塩尻市", gas:7500, gasLabel:"ガス（プロパン想定）", park:2500,
+    note:"2LDKの家賃相場はおよそ5.5〜7万円。プロパンガス物件が多く、ガス代は都市ガスの1.5倍前後になりがち。駐車場1台込みの物件も多め。"},
+  azumino:{label:"安曇野市", gas:7500, gasLabel:"ガス（プロパン想定）", park:1500,
+    note:"2LDKの家賃相場はおよそ5.5〜7万円。駐車場2台込みの物件も多い一方、車移動が前提で2台持ちになりやすいエリアです。"}
+};
+
+const DEFAULT = {
+  v:1,
+  names:["あなた","パートナー"],
+  incomes:[200000,150000],
+  incomeType:"net",
+  area:"matsumoto",
+  split:"ratio",
+  fixed:[130000,100000],
+  budget:[
+    {id:"rent",g:"home",label:"家賃",amt:70000},
+    {id:"kanri",g:"home",label:"共益費・管理費",amt:3000},
+    {id:"park",g:"home",label:"駐車場（1台）",amt:5000},
+    {id:"elec",g:"util",label:"電気",amt:11000,season:"elec"},
+    {id:"gas",g:"util",label:"ガス（中心部は都市ガス物件も）",amt:5500,season:"gas"},
+    {id:"water",g:"util",label:"上下水道",amt:4500,season:"water"},
+    {id:"kero",g:"util",label:"灯油（年間を月割り）",amt:3000,season:"kero"},
+    {id:"net",g:"comm",label:"光回線",amt:5000},
+    {id:"phone",g:"comm",label:"スマホ2台（格安SIM）",amt:6000},
+    {id:"food",g:"food",label:"食費（自炊中心）",amt:50000},
+    {id:"eatout",g:"fun",label:"外食・デート",amt:15000},
+    {id:"daily",g:"life",label:"日用品",amt:8000},
+    {id:"subs",g:"life",label:"サブスク",amt:2000},
+    {id:"car",g:"car",label:"ガソリン・保険・税金の月割り",amt:20000},
+    {id:"spare",g:"other",label:"予備費（医療・冠婚葬祭）",amt:10000}
+  ],
+  initial:[
+    {id:"shiki",g:"contract",label:"敷金（保証金）",m:1,amt:70000,off:false},
+    {id:"rei",g:"contract",label:"礼金",m:1,amt:70000,off:false},
+    {id:"chukai",g:"contract",label:"仲介手数料",m:1.1,amt:77000,off:false},
+    {id:"maeyachin",g:"contract",label:"前家賃（翌月分＋日割り）",m:1.5,amt:105000,off:false},
+    {id:"hosho",g:"contract",label:"保証会社の初回保証料",m:.5,amt:35000,off:false},
+    {id:"kasai",g:"contract",label:"火災保険（2年）",amt:20000,off:false},
+    {id:"kagi",g:"contract",label:"鍵交換",amt:16500,off:false},
+    {id:"hikkoshi",g:"move",label:"引越し業者（県内・2人分）",amt:60000,off:false},
+    {id:"tetsuzuki",g:"move",label:"住民票・郵便・手続きの雑費",amt:5000,off:false},
+    {id:"fridge",g:"furniture",label:"冷蔵庫（2人用 300L前後）",amt:60000,off:false},
+    {id:"wash",g:"furniture",label:"洗濯機",amt:50000,off:false},
+    {id:"bed",g:"furniture",label:"ベッド・寝具",amt:60000,off:false},
+    {id:"kitchen",g:"furniture",label:"電子レンジ・炊飯器",amt:30000,off:false},
+    {id:"curtain",g:"furniture",label:"カーテン・照明",amt:30000,off:false},
+    {id:"sofa",g:"furniture",label:"ソファ・ダイニングテーブル",amt:30000,off:false},
+    {id:"dishes",g:"furniture",label:"調理器具・食器・日用品",amt:20000,off:false},
+    {id:"heater",g:"winter",label:"石油ファンヒーター",amt:20000,off:false},
+    {id:"kotatsu",g:"winter",label:"こたつ・電気毛布",amt:12000,off:false},
+    {id:"danetsu",g:"winter",label:"窓の断熱シート・すきま対策",amt:5000,off:false},
+    {id:"yobi",g:"spare",label:"予備費（想定外の出費）",amt:50000,off:false}
+  ],
+  savings:{current:0, monthly:[60000,40000], cushion:true, moveIn:"",
+    bonuses:[
+      {id:"summer",label:"夏のボーナス",m:6,amt:[0,0]},
+      {id:"winter",label:"冬のボーナス",m:12,amt:[0,0]}
+    ],
+    overrides:{}}
+};
+
+const $ = s=>document.querySelector(s);
+const clone = o=>JSON.parse(JSON.stringify(o));
+const yen = n=>(n<0?"−":"")+"¥"+Math.abs(Math.round(n||0)).toLocaleString("ja-JP");
+const man = n=>{ const v=Math.round(n/1000)/10; return (Number.isInteger(v)?v:v.toFixed(1))+"万"; };
+const esc = s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const uid = ()=>Math.random().toString(36).slice(2,9);
+const todayStr = ()=>{ const d=new Date(); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); };
+function addMonths(ym, n){ const [y,m]=ym.split("-").map(Number); const d=new Date(y,m-1+n,1); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function ymLabel(ym){ const [y,m]=ym.split("-"); return y+"年"+Number(m)+"月"; }
+function monthsBetween(a,b){ const [y1,m1]=a.split("-").map(Number),[y2,m2]=b.split("-").map(Number); return (y2-y1)*12+(m2-m1); }
+
+let S = clone(DEFAULT);
+S.savings.moveIn = addMonths(todayStr().slice(0,7), 9);
+let expenses = [];
+let tab = "home";
+let editBudget = false;
+let month = todayStr().slice(0,7);
+
+function normalize(d){
+  const o = Object.assign(clone(DEFAULT), d||{});
+  o.savings = Object.assign(clone(DEFAULT.savings), (d&&d.savings)||{});
+  if (!Array.isArray(o.savings.bonuses)) o.savings.bonuses = clone(DEFAULT.savings.bonuses);
+  if (!o.savings.overrides || typeof o.savings.overrides!=="object") o.savings.overrides = {};
+  if (!o.savings.moveIn) o.savings.moveIn = addMonths(todayStr().slice(0,7), 9);
+  return o;
+}
+
+/* ---------- 計算 ---------- */
+const rent = ()=> (S.budget.find(b=>b.id==="rent")||{amt:0}).amt;
+const net = i=> S.incomeType==="gross" ? Math.round((+S.incomes[i]||0)*0.78) : (+S.incomes[i]||0);
+const netTotal = ()=> net(0)+net(1);
+const monthly = ()=> S.budget.reduce((a,b)=>a+(+b.amt||0),0);
+const groupSum = k=> S.budget.filter(b=>b.g===k).reduce((a,b)=>a+(+b.amt||0),0);
+const iAmt = it=> it.m!=null ? Math.round(rent()*it.m) : (+it.amt||0);
+function shareOf(i, how){
+  how = how||S.split;
+  if (how==="half") return .5;
+  if (how==="fixed"){ const t=(+S.fixed[0]||0)+(+S.fixed[1]||0); return t? (+S.fixed[i]||0)/t : .5; }
+  const t=netTotal(); return t? net(i)/t : .5;
+}
+function payOf(i, how){
+  how = how||S.split;
+  if (how==="fixed") return +S.fixed[i]||0;
+  return monthly()*shareOf(i,how);
+}
+function initialNeeded(){ return S.initial.filter(x=>!x.off).reduce((a,x)=>a+iAmt(x),0); }
+function target(){ return initialNeeded() + (S.savings.cushion? monthly():0); }
+/* 月ごとの貯金額：ふだんの額（月別に上書き可）＋ボーナス */
+function monthRow(ym){
+  const ov=(S.savings.overrides||{})[ym];
+  const reg=[0,1].map(i=> ov && ov[i]!=null ? +ov[i]||0 : +S.savings.monthly[i]||0);
+  const mo=Number(ym.slice(5));
+  const bonus=[0,1].map(i=> (S.savings.bonuses||[]).filter(b=>+b.m===mo).reduce((a,b)=>a+(+(b.amt||[])[i]||0),0));
+  return {ym, reg, bonus, ov:!!ov, total:reg[0]+reg[1]+bonus[0]+bonus[1]};
+}
+function plan(){
+  const tgt=target(), cur=+S.savings.current||0, rem=Math.max(0,tgt-cur);
+  const per=(+S.savings.monthly[0]||0)+(+S.savings.monthly[1]||0);
+  const nowYm=todayStr().slice(0,7);
+  const until = Math.max(1, monthsBetween(nowYm, S.savings.moveIn||addMonths(nowYm,9)));
+  const cum=[cur]; let months = rem===0 ? 0 : Infinity;
+  for(let i=0;i<120;i++){ cum.push(cum[i]+monthRow(addMonths(nowYm,i)).total); if(!isFinite(months) && cum[i+1]>=tgt) months=i+1; if(i>=until && isFinite(months)) break; }
+  const reach = isFinite(months) && months>0 ? addMonths(nowYm, months-1) : null;
+  let bonusBefore=0; for(let i=0;i<until;i++){ const r=monthRow(addMonths(nowYm,i)); bonusBefore+=r.bonus[0]+r.bonus[1]; }
+  const need = Math.max(0, rem-bonusBefore)/until;
+  const atMoveIn = cum[Math.min(until,cum.length-1)];
+  const bonusYear=(S.savings.bonuses||[]).reduce((a,b)=>a+(+b.amt[0]||0)+(+b.amt[1]||0),0);
+  return {tgt,cur,rem,per,months,reach,until,need,nowYm,cum,atMoveIn,bonusBefore,bonusYear};
+}
+function utilByMonth(){
+  const out=new Array(12).fill(0);
+  S.budget.filter(b=>b.g==="util").forEach(b=>{ const f=SEASON[b.season]; for(let m=0;m<12;m++) out[m]+=(+b.amt||0)*(f?f[m]:1); });
+  return out;
+}
+
+/* ---------- 保存・同期（GitHubのファイルに直接保存する） ---------- */
+/* 設定と家計簿を、このサイトと同じリポジトリのJSONファイルに読み書きする。
+   書き込みにはGitHubのトークンが必要。トークンはこの端末のブラウザにだけ保存し、
+   リポジトリには絶対に書き込まない（保存されるのは settings.json / expenses.json だけ）。 */
+const GH = {
+  owner:"harutong08", repo:"futari-kurashicho", branch:"main",
+  paths:{ settings:"data/settings.json", expenses:"data/expenses.json" }
+};
+const API = "https://api.github.com/repos/"+GH.owner+"/"+GH.repo+"/";
+const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算」タブの『2人で同期する』からつなぐと保存できます";
+const POLL_MS = { github:30000, readonly:300000 };
+const TOKEN_KEY = "futari.token";
+
+let token = "";
+let mode = "local";          /* local（この端末だけ）/ readonly（見るだけ）/ github（2人で同期） */
+let pending = null;          /* 入力中に届いたリモートの設定 */
+let localDirty = false;      /* 見るだけの状態で編集してしまった */
+let saveTimer = null, expTimer = null, pollTimer = null;
+let busy = 0, lastErr = "";
+let sha = { settings:null, expenses:null };
+let pushed = { settings:null, expenses:null };
+let syncedIds = new Set();   /* GitHub側にあると分かっている支出のid */
+let deletedIds = new Set();  /* この端末で消した支出のid（復活を防ぐ） */
+let lastNudge = 0;
+
+function b64enc(str){
+  const b=new TextEncoder().encode(str); let s=""; const CH=0x8000;
+  for(let i=0;i<b.length;i+=CH) s+=String.fromCharCode.apply(null, b.subarray(i,i+CH));
+  return btoa(s);
+}
+function b64dec(b64){
+  const bin=atob(String(b64||"").replace(/\s/g,"")); const b=new Uint8Array(bin.length);
+  for(let i=0;i<bin.length;i++) b[i]=bin.charCodeAt(i);
+  return new TextDecoder().decode(b);
+}
+function ghHeaders(extra){
+  const h=Object.assign({"Accept":"application/vnd.github+json","X-GitHub-Api-Version":"2022-11-28"}, extra||{});
+  if (token) h.Authorization="Bearer "+token;
+  return h;
+}
+async function ghErr(r){
+  let m=""; try{ const j=await r.json(); m=j.message||""; }catch(e){}
+  if (r.status===401) return "トークンが違うか、期限切れです";
+  if (r.status===403 && /rate limit/i.test(m)) return "GitHubの回数制限です。少し待つと戻ります";
+  if (r.status===403 || r.status===404) return "このリポジトリに書き込む権限がありません";
+  if (r.status===409 || r.status===422) return "他の端末の保存とぶつかりました";
+  return "GitHubのエラー（"+r.status+"）"+(m? "："+m : "");
+}
+async function ghGet(key){
+  const url=API+"contents/"+GH.paths[key]+"?ref="+encodeURIComponent(GH.branch)+"&t="+Date.now();
+  const r=await fetch(url,{headers:ghHeaders(), cache:"no-store"});
+  if (r.status===404) return {missing:true, sha:null, data:null};
+  if (!r.ok) throw new Error(await ghErr(r));
+  const j=await r.json();
+  let data=null; try{ data=JSON.parse(b64dec(j.content)); }catch(e){ data=null; }
+  return {missing:false, sha:j.sha, data};
+}
+async function ghPut(key, data, curSha, message){
+  const body={message, content:b64enc(JSON.stringify(data,null,1)), branch:GH.branch};
+  if (curSha) body.sha=curSha;
+  const r=await fetch(API+"contents/"+GH.paths[key], {method:"PUT", headers:ghHeaders({"Content-Type":"application/json"}), body:JSON.stringify(body)});
+  if (r.status===409 || r.status===422) return {conflict:true};
+  if (!r.ok) throw new Error(await ghErr(r));
+  const j=await r.json();
+  return {sha:j.content && j.content.sha};
+}
+
+/* 見るだけの状態（GitHub側にデータはあるがトークンがない）でだけ入力を止める。
+   まだ同期していない端末では、これまでどおりブラウザに保存する。 */
+function canWrite(){ return mode!=="readonly"; }
+function nudge(){
+  const now=Date.now(); if (now-lastNudge < 20000) return; lastNudge=now; toast(READONLY_MSG);
+}
+function markDirty(){ localDirty=true; setSync(); nudge(); }
+
+function setSync(){
+  const el=$("#sync"); if(!el) return;
+  el.classList.toggle("on", mode==="github" && !lastErr);
+  const txt = lastErr ? lastErr
+    : busy ? "保存中…"
+    : mode==="github" ? "2人で同期中"
+    : mode==="readonly" ? (localDirty? "見るだけ・変更は未保存" : "見るだけ（保存はしていません）")
+    : "この端末だけに保存";
+  const s=el.querySelector("span"); if(s) s.textContent=txt;
+  el.title=txt;
+}
+
+function saveLocalSettings(){ try{ localStorage.setItem("futari.settings", JSON.stringify(S)); }catch(e){} }
+function saveLocalExpenses(){ try{ localStorage.setItem("futari.expenses", JSON.stringify(expenses)); }catch(e){} }
+function editing(){ const a=document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest("#view"); }
+
+function loadLocal(){
+  try{ const s=localStorage.getItem("futari.settings"); if(s) S=normalize(JSON.parse(s)); }catch(e){}
+  try{ const x=localStorage.getItem("futari.expenses"); if(x) expenses=JSON.parse(x)||[]; }catch(e){}
+}
+
+function scheduleSave(){
+  saveLocalSettings();
+  if (mode!=="github"){ if(mode==="readonly") markDirty(); return; }
+  clearTimeout(saveTimer);
+  saveTimer=setTimeout(pushSettings, 1500);
+}
+function saveExpensesSoon(){
+  saveLocalExpenses();
+  if (mode!=="github"){ if(mode==="readonly") markDirty(); return; }
+  clearTimeout(expTimer);
+  expTimer=setTimeout(pushExpenses, 1200);
+}
+
+async function pushSettings(){
+  if (mode!=="github") return;
+  const data=clone(S), json=JSON.stringify(data);
+  if (json===pushed.settings) return;
+  busy++; setSync();
+  try{
+    for (let i=0;i<3;i++){
+      const r=await ghPut("settings", data, sha.settings, "家計：設定を更新");
+      if (r.conflict){ const g=await ghGet("settings"); sha.settings=g.sha; continue; }
+      sha.settings=r.sha; pushed.settings=json; lastErr=""; break;
+    }
+  }catch(e){ lastErr=e.message; toast("保存できませんでした："+e.message); }
+  busy--; setSync();
+}
+
+function sortExp(list){
+  return list.slice().sort((a,b)=>String(b.date||"").localeCompare(String(a.date||""))||((b.createdAt||0)-(a.createdAt||0)));
+}
+function mergeExp(remote, local){
+  const map=new Map();
+  (remote||[]).forEach(e=>{ if(e&&e.id && !deletedIds.has(e.id)) map.set(e.id,e); });
+  (local||[]).forEach(e=>{ if(e&&e.id && !deletedIds.has(e.id)) map.set(e.id,e); });
+  return sortExp([...map.values()]);
+}
+async function pushExpenses(){
+  if (mode!=="github") return;
+  busy++; setSync();
+  try{
+    for (let i=0;i<3;i++){
+      const g=await ghGet("expenses");
+      const remote=(!g.missing && Array.isArray(g.data))? g.data : [];
+      const merged=mergeExp(remote, expenses);
+      const json=JSON.stringify(merged);
+      if (!g.missing && json===pushed.expenses){ sha.expenses=g.sha; break; }
+      const r=await ghPut("expenses", merged, g.sha, "家計：家計簿を更新");
+      if (r.conflict) continue;
+      sha.expenses=r.sha; pushed.expenses=json; lastErr="";
+      expenses=merged; syncedIds=new Set(merged.map(e=>e.id));
+      if (!editing()) render();
+      break;
+    }
+  }catch(e){ lastErr=e.message; toast("保存できませんでした："+e.message); }
+  busy--; setSync();
+}
+
+/* GitHub側の内容を取り込む。入力中は pending に置いて、手が止まってから反映する */
+function adoptSettings(data){
+  const inc=normalize(clone(data));
+  const json=JSON.stringify(inc);
+  if (json===JSON.stringify(S)){ pushed.settings=json; return false; }
+  if (editing()){ pending=inc; return false; }
+  S=inc; pushed.settings=json; saveLocalSettings(); return true;
+}
+function adoptExpenses(remote){
+  const list=Array.isArray(remote)? remote.filter(e=>e&&e.id && !deletedIds.has(e.id)) : [];
+  const remoteIds=new Set(list.map(e=>e.id));
+  /* まだGitHubに送れていない分だけ残す（相手が消した分を復活させない） */
+  const unsent=expenses.filter(e=>e&&e.id && !remoteIds.has(e.id) && !syncedIds.has(e.id));
+  const next=sortExp(list.concat(unsent));
+  syncedIds=remoteIds;
+  const changed=JSON.stringify(next)!==JSON.stringify(expenses);
+  expenses=next; saveLocalExpenses();
+  if (!unsent.length) pushed.expenses=JSON.stringify(next);
+  return changed;
+}
+
+async function pull(){
+  if (mode==="local" || localDirty || busy) return;
+  try{
+    const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
+    lastErr="";
+    let changed=false;
+    if (gs.missing){ sha.settings=null; } else { sha.settings=gs.sha; if(gs.data) changed=adoptSettings(gs.data)||changed; }
+    if (ge.missing){ sha.expenses=null; syncedIds=new Set(); } else { sha.expenses=ge.sha; changed=adoptExpenses(ge.data)||changed; }
+    if (changed && !editing()) render();
+  }catch(e){ lastErr=e.message; }
+  setSync();
+}
+function startPoll(){
+  clearInterval(pollTimer);
+  const ms=POLL_MS[mode]; if(!ms) return;
+  pollTimer=setInterval(pull, ms);
+}
+
+async function ghConnect(tk){
+  tk=String(tk||"").trim();
+  if (!tk){ toast("トークンを貼り付けてください"); return; }
+  const prev=token; token=tk;
+  busy++; setSync();
+  try{
+    const r=await fetch(API, {headers:ghHeaders(), cache:"no-store"});
+    if (!r.ok) throw new Error(await ghErr(r));
+    const info=await r.json();
+    if (info.permissions && info.permissions.push===false) throw new Error("このトークンには書き込みの権限がありません");
+    const gs=await ghGet("settings");
+    if (!gs.missing && gs.data){
+      const remoteFirst = confirm("GitHubに保存されている内容を読み込みますか？\n\nOK：GitHub側の内容にそろえる\nキャンセル：この端末の内容でGitHub側を上書きする");
+      if (remoteFirst){ sha.settings=gs.sha; S=normalize(clone(gs.data)); pushed.settings=JSON.stringify(S); saveLocalSettings(); }
+      else { sha.settings=gs.sha; pushed.settings=null; }
+    } else { sha.settings=null; pushed.settings=null; }
+    const ge=await ghGet("expenses");
+    if (!ge.missing){ sha.expenses=ge.sha; adoptExpenses(ge.data); } else { sha.expenses=null; syncedIds=new Set(); }
+    try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
+    mode="github"; localDirty=false; lastErr="";
+    busy--; setSync();
+    await pushSettings();
+    if (expenses.length) await pushExpenses();
+    startPoll(); render(); toast("GitHubにつなぎました。2人で同期します");
+    return;
+  }catch(e){
+    token=prev; lastErr=""; busy--; setSync();
+    alert("つなげませんでした。\n\n"+e.message);
+  }
+}
+function ghDisconnect(){
+  if (!confirm("この端末のトークンを消して、同期をやめますか？（GitHub側のデータはそのまま残ります）")) return;
+  token=""; try{ localStorage.removeItem(TOKEN_KEY); }catch(e){}
+  mode = sha.settings || sha.expenses ? "readonly" : "local";
+  localDirty=false; lastErr=""; startPoll(); setSync(); render(); toast("同期をやめました");
+}
+
+async function boot(){
+  try{ token=(localStorage.getItem(TOKEN_KEY)||"").trim(); }catch(e){ token=""; }
+  loadLocal(); setSync(); render();
+  try{
+    const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
+    if (gs.missing && ge.missing && !token){ mode="local"; setSync(); return; }
+    mode = token ? "github" : "readonly";
+    if (!gs.missing){ sha.settings=gs.sha; if(gs.data) adoptSettings(gs.data); }
+    if (!ge.missing){ sha.expenses=ge.sha; adoptExpenses(ge.data); }
+    render(); setSync(); startPoll();
+    if (mode==="github"){ await pushSettings(); if(expenses.length) await pushExpenses(); }
+  }catch(e){
+    mode="local"; lastErr=e.message; setSync();
+    if (token) toast("GitHubにつなげませんでした："+e.message);
+  }
+}
+document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) pull(); });
+window.addEventListener("focus", ()=>{ pull(); });
+
+/* ---------- 描画ヘルパー ---------- */
+function syncCard(){
+  const st = mode==="github" ? {pill:"good", t:"2人で同期中"}
+    : mode==="readonly" ? {pill:"warn", t:"見るだけ（保存はされません）"}
+    : {pill:"neutral", t:"この端末だけに保存"};
+  const body = mode==="github"
+    ? `<p style="margin:0">この端末はGitHubにつながっています。入力するたびに
+        <code>${GH.paths.settings}</code> と <code>${GH.paths.expenses}</code> が更新され、
+        もう1人の画面にも30秒ほどで反映されます。</p>
+      <div class="row"><button class="btn small" data-act="ghSync">今すぐ読み込む</button>
+        <button class="btn small" data-act="ghDisconnect">この端末の接続をやめる</button></div>`
+    : `<p style="margin:0">GitHubのトークンを貼り付けると、2人で同じデータを見られるようになります。
+        トークンはこの端末のブラウザにだけ保存され、サイトには書き込まれません。</p>
+      <div class="row" style="flex-wrap:nowrap;gap:8px">
+        <input class="in" type="password" id="ghToken" placeholder="github_pat_… を貼り付け" autocomplete="off" spellcheck="false" aria-label="GitHubのトークン" style="flex:1">
+        <button class="btn primary small" data-act="ghConnect">つなぐ</button>
+      </div>
+      <details><summary style="cursor:pointer;font-size:13px;color:var(--muted)">トークンの作り方</summary>
+        <ol style="font-size:13px;color:var(--muted);padding-left:1.2em;margin:8px 0 0">
+          <li>GitHubで <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens</b> を開く</li>
+          <li><b>Generate new token</b> を押し、Repository access で <b>${GH.owner}/${GH.repo}</b> だけを選ぶ</li>
+          <li>Permissions の <b>Contents</b> を <b>Read and write</b> にする</li>
+          <li>できた <code>github_pat_…</code> をコピーして、上の欄に貼り付ける</li>
+        </ol>
+        <p class="note">2人で同じトークンを使ってかまいません。端末をなくしたときは、GitHubの同じ画面から取り消せます。</p>
+      </details>`;
+  return `<section class="card s12">
+    <div class="row between"><div><h2>2人で同期する（GitHub）</h2>
+      <p class="sub">設定と家計簿を、このサイトと同じリポジトリのJSONファイルに保存します</p></div>
+      <span class="pill ${st.pill}">${st.t}</span></div>
+    <div class="stack" style="gap:10px">${body}
+      <div class="callout warn" style="font-size:13px"><b>公開リポジトリです。</b>
+        保存した家計のデータ（収入・貯金額・支出の記録）は、URLを知らない人でもGitHub上で見られます。
+        見られて困る内容は入れないでください。</div>
+    </div>
+  </section>`;
+}
+
+function yenInput(path, val, attrs){
+  return `<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="0" step="500" id="f-${path.replace(/\./g,"-")}" data-f="${path}" data-num value="${Math.round(+val||0)}" ${attrs||""}></span>`;
+}
+function statusFor(ratio, good, warn){ return ratio<=good? "good" : ratio<=warn? "warn" : "bad"; }
+
+function donut(){
+  const total=monthly()||1, R=62, C=2*Math.PI*R; let acc=0;
+  const segs = GROUPS.map(g=>{ const v=groupSum(g.k); if(!v) return ""; const len=v/total*C; const s=`<circle r="${R}" cx="80" cy="80" fill="none" stroke-width="22" style="stroke:var(--c-${g.k})" stroke-dasharray="${Math.max(0,len-1.5)} ${C}" stroke-dashoffset="${-acc}" transform="rotate(-90 80 80)"/>`; acc+=len; return s; }).join("");
+  const legend = GROUPS.filter(g=>groupSum(g.k)).map(g=>{ const v=groupSum(g.k); return `<li><i style="background:var(--c-${g.k})"></i><span>${g.label}</span><span class="num">${yen(v)}</span><span class="p">${Math.round(v/total*100)}%</span></li>`; }).join("");
+  return `<div class="donut"><svg viewBox="0 0 160 160" width="160" height="160" role="img" aria-label="毎月の生活費の内訳">
+    <circle r="${R}" cx="80" cy="80" fill="none" stroke-width="22" style="stroke:var(--surface-2)"/>${segs}
+    <text x="80" y="74" text-anchor="middle" style="fill:var(--muted);font-size:11px;font-family:var(--f-body)">毎月</text>
+    <text x="80" y="96" text-anchor="middle" style="fill:var(--ink);font-size:20px;font-weight:600">${man(total)}</text></svg>
+    <ul class="legend">${legend}</ul></div>`;
+}
+
+function utilChart(){
+  const vals=utilByMonth(), W=640,H=230,L=52,Rp=10,T=22,B=30;
+  const maxV=Math.max(...vals,1), step=maxV>40000?10000:5000, top=Math.ceil(maxV/step)*step;
+  const iw=(W-L-Rp)/12, bw=iw*0.62, y=v=>T+(H-T-B)*(1-v/top);
+  const maxI=vals.indexOf(Math.max(...vals)), minI=vals.indexOf(Math.min(...vals));
+  let g="";
+  for(let t=0;t<=top;t+=step*(top/step>4?2:1)){ g+=`<line x1="${L}" x2="${W-Rp}" y1="${y(t)}" y2="${y(t)}" style="stroke:var(--line)" stroke-width="1"/><text x="${L-8}" y="${y(t)+4}" text-anchor="end" style="fill:var(--faint);font-size:11px">${t?man(t):"0"}</text>`; }
+  const bars=vals.map((v,i)=>{ const x=L+iw*i+(iw-bw)/2, winter=[0,1,2,11].includes(i);
+    const lab = (i===maxI||i===minI)? `<text x="${x+bw/2}" y="${y(v)-6}" text-anchor="middle" style="fill:var(--ink);font-size:11px;font-weight:600">${yen(v)}</text>`:"";
+    return `<rect x="${x}" y="${y(v)}" width="${bw}" height="${Math.max(0,H-B-y(v))}" rx="4" style="fill:var(--c-util);opacity:${winter?1:.55}"/>${lab}<text x="${x+bw/2}" y="${H-10}" text-anchor="middle" style="fill:var(--muted);font-size:11px;font-family:var(--f-body)">${i+1}月</text>`; }).join("");
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="月別の光熱費の見込み">${g}${bars}</svg>`;
+}
+
+function savingsChart(p){
+  const W=640,H=230,L=52,Rp=16,T=20,B=30;
+  const nowYm=p.nowYm; let N = isFinite(p.months)? Math.max(p.months, p.until) : Math.max(p.until,12); N=Math.min(Math.max(N,3),48);
+  const pts=[]; for(let k=0;k<=N;k++){ let v=p.cum[k]; if(v==null){ v=p.cum[p.cum.length-1]; for(let i=p.cum.length-1;i<k;i++) v+=monthRow(addMonths(nowYm,i)).total; } pts.push(Math.min(v, p.tgt*1.15)); }
+  const top=Math.max(p.tgt*1.1, ...pts, 1), x=k=>L+(W-L-Rp)*k/N, y=v=>T+(H-T-B)*(1-v/top);
+  const step = top>1500000?500000: top>600000?200000:100000;
+  let g=""; for(let t=0;t<=top;t+=step){ g+=`<line x1="${L}" x2="${W-Rp}" y1="${y(t)}" y2="${y(t)}" style="stroke:var(--line)"/><text x="${L-8}" y="${y(t)+4}" text-anchor="end" style="fill:var(--faint);font-size:11px">${t?man(t):"0"}</text>`; }
+  const every = N>24?6: N>12?3:2; let xl="";
+  for(let k=0;k<=N;k+=every){ const ym=addMonths(nowYm,k); xl+=`<text x="${x(k)}" y="${H-10}" text-anchor="middle" style="fill:var(--muted);font-size:11px">${ym.slice(2,4)}/${Number(ym.slice(5))}</text>`; }
+  const line=pts.map((v,k)=>`${k?"L":"M"}${x(k).toFixed(1)} ${y(v).toFixed(1)}`).join(" ");
+  const area=line+` L${x(N)} ${y(0)} L${x(0)} ${y(0)} Z`;
+  const mi=Math.min(p.until,N);
+  const move = `<line x1="${x(mi)}" x2="${x(mi)}" y1="${T}" y2="${H-B}" style="stroke:var(--pb)" stroke-width="1.5" stroke-dasharray="3 4"/><text x="${x(mi)+(mi>N*0.75?-6:6)}" y="${T+10}" text-anchor="${mi>N*0.75?"end":"start"}" style="fill:var(--pb);font-size:11px;font-family:var(--f-body);font-weight:700">入居したい月</text>`;
+  let reach=""; if(isFinite(p.months) && p.months<=N){ reach=`<circle cx="${x(p.months)}" cy="${y(pts[p.months])}" r="5" style="fill:var(--accent);stroke:var(--surface)" stroke-width="2"/>`; }
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="貯金の見通し">${g}
+    <path d="${area}" style="fill:var(--accent);opacity:.12"/><path d="${line}" fill="none" style="stroke:var(--accent)" stroke-width="2.5" stroke-linejoin="round"/>
+    <line x1="${L}" x2="${W-Rp}" y1="${y(p.tgt)}" y2="${y(p.tgt)}" style="stroke:var(--ink)" stroke-width="1.2" stroke-dasharray="6 5"/>
+    <text x="${W-Rp}" y="${y(p.tgt)-6}" text-anchor="end" style="fill:var(--ink);font-size:11px;font-family:var(--f-body);font-weight:700">目標 ${yen(p.tgt)}</text>
+    ${move}${reach}${xl}</svg>`;
+}
+
+function peopleCards(title){
+  return `<div class="people">${[0,1].map(i=>{ const pay=payOf(i), left=net(i)-pay;
+    return `<div class="person ${i?"b":"a"}"><div class="n"><span class="dot ${i?"b":"a"}">${esc(S.names[i].slice(0,1))}</span>${esc(S.names[i])}</div>
+    <div class="m">${title}</div><div class="v">${yen(pay)}</div>
+    <div class="m">手取りの残り <span class="num" style="color:var(--ink);font-weight:600">${yen(left)}</span></div></div>`; }).join("")}</div>`;
+}
+const SPLIT_LABEL = {ratio:"収入比で分担", half:"きっちり折半", fixed:"共通口座に定額"};
+/* S.split / S.area も保存ファイル由来。"constructor" などを引かないよう自前のキーだけ見る */
+const pick = (table, k, fallback) => Object.prototype.hasOwnProperty.call(table, k) ? table[k] : fallback;
+const splitLabel = k => pick(SPLIT_LABEL, k, SPLIT_LABEL.ratio);
+const areaOf = k => pick(AREAS, k, AREAS.matsumoto);
+
+/* ---------- 各タブ ---------- */
+function viewHome(){
+  const m=monthly(), inc=netTotal(), ratio=inc? m/inc:1, left=inc-m, r=rent(), rr=inc? r/inc:1, p=plan();
+  const st=statusFor(ratio,.72,.85), stText={good:"ゆとりあり",warn:"やや余裕少なめ",bad:"赤字の心配あり"}[st];
+  const rst=statusFor(rr,.25,.3);
+  const util=utilByMonth(), uMax=Math.max(...util), uMin=Math.min(...util);
+  const mExp=expenses.filter(e=>(e.date||"").slice(0,7)===todayStr().slice(0,7)); const spent=mExp.reduce((a,e)=>a+(+e.amount||0),0);
+  const prog = p.tgt? Math.min(1,p.cur/p.tgt):0;
+  return `<div class="grid">
+  <section class="card s12"><div class="hero">
+    <div>
+      <div class="eyebrow">ふたり暮らしの生活費（1か月）</div>
+      <div class="big num">${yen(m)}<small>/月</small></div>
+      <p class="lead">2人の手取り <b class="num">${yen(inc)}</b> のうち <b class="num">${Math.round(ratio*100)}%</b>。残りの <b class="num">${yen(left)}</b> が貯金と、それぞれのお小遣いになります。</p>
+      <div class="row" style="margin-top:12px"><span class="pill ${st}">家計：${stText}</span><span class="pill ${rst}">家賃は手取りの${Math.round(rr*100)}%（目安25%以下）</span></div>
+    </div>
+    <div class="card flat stack" style="padding:16px;gap:10px">
+      <div class="row between"><span class="eyebrow">月の${S.incomeType==="gross"?"額面収入":"手取り"}</span>
+        <div class="choice" role="group" aria-label="収入の種類">
+          <button data-set="incomeType" data-v="net" aria-pressed="${S.incomeType==="net"}">手取り</button>
+          <button data-set="incomeType" data-v="gross" aria-pressed="${S.incomeType==="gross"}">額面</button>
+        </div></div>
+      <div class="fields" style="grid-template-columns:1fr 1fr;gap:10px">
+        ${[0,1].map(i=>`<label class="fld">${esc(S.names[i])}${yenInput("incomes."+i, S.incomes[i], 'step="1000" aria-label="'+esc(S.names[i])+'の収入"')}</label>`).join("")}
+      </div>
+      <dl class="kv" style="margin:0">
+        ${S.incomeType==="gross"?`<dt>手取り合計（約78%で概算）</dt><dd>${yen(inc)}</dd>`:""}
+        <dt>生活費 <button class="btn ghost small" data-act="toggleEdit" style="padding:0 4px;color:var(--accent)">${editBudget?"閉じる":"編集"}</button></dt><dd>−${yen(m).slice(1)}</dd>
+        <dt class="tot">自由に使える・貯められる</dt><dd class="tot ${left<0?"over":""}">${yen(left)}</dd>
+      </dl>
+    </div>
+  </div></section>
+
+  ${editBudget?`<section class="card s12" id="quickEdit">
+    <div class="row between"><div><h2>生活費を編集</h2><p class="sub">金額を変えると、合計・分担・貯金計画がすぐ計算し直されます。項目の追加・削除は「毎月の予算」タブで</p></div>
+      <button class="btn small primary" data-act="toggleEdit">完了</button></div>
+    <div class="grid">${GROUPS.map(g=>{ const items=S.budget.map((b,idx)=>[b,idx]).filter(([b])=>b.g===g.k); if(!items.length) return "";
+      return `<div class="s6 group" style="border-top:0;padding-top:0"><div class="ghead"><h3><i style="background:var(--c-${g.k})"></i>${g.label}</h3><span class="num">${yen(groupSum(g.k))}</span></div>
+      ${items.map(([b,idx])=>`<div class="item" style="grid-template-columns:1fr 140px"><span style="font-size:14px">${esc(b.label)}</span>${yenInput("budget."+idx+".amt", b.amt, 'aria-label="'+esc(b.label)+'の金額"')}</div>`).join("")}</div>`; }).join("")}</div>
+  </section>`:""}
+
+  <section class="card s7">
+    <div class="row between"><div><h2>引越しまでに必要なお金</h2><p class="sub">契約・引越し・家具家電・冬支度${S.savings.cushion?"＋生活費1か月分の予備":""}</p></div>
+    <button class="btn small" data-go="initial">くわしく</button></div>
+    <div class="stats">
+      <div class="stat"><span class="l">目標額</span><span class="v">${yen(p.tgt)}</span></div>
+      <div class="stat"><span class="l">いまの貯金</span><span class="v">${yen(p.cur)}</span></div>
+      <div class="stat"><span class="l">達成見込み</span><span class="v">${p.months===0?"達成済み": p.reach? ymLabel(p.reach) : "—"}</span></div>
+    </div>
+    <div class="bar" style="margin-top:14px" aria-label="達成率"><span style="width:${prog*100}%"></span></div>
+    <div class="row between" style="margin-top:6px;font-size:12px;color:var(--muted)"><span>達成率 ${Math.round(prog*100)}%</span><span>毎月2人で ${yen(p.per)}${p.bonusYear?`＋ボーナス年 ${yen(p.bonusYear)}`:""}</span></div>
+    <div class="callout ${p.atMoveIn>=p.tgt?"":"warn"}" style="margin-top:14px">
+      ${ymLabel(S.savings.moveIn)}の入居時点で、貯金は <b class="num">${yen(p.atMoveIn)}</b> の見込み。
+      ${p.atMoveIn>=p.tgt? "いまの計画で間に合います。" : `目標まで <b class="num">${yen(p.tgt-p.atMoveIn)}</b> 足りません（毎月あと約 <b class="num">${yen(Math.ceil((p.tgt-p.atMoveIn)/p.until/1000)*1000)}</b>）。`}
+    </div>
+  </section>
+
+  <section class="card s5">
+    <div class="row between"><div><h2>2人の分担</h2><p class="sub">${esc(splitLabel(S.split))}の場合</p></div><button class="btn small" data-go="budget">変更</button></div>
+    ${peopleCards("毎月の負担額")}
+    ${S.split==="fixed" && (S.fixed[0]+S.fixed[1]!==m) ? `<p class="note">入金合計 ${yen(+S.fixed[0]+ +S.fixed[1])}／生活費 ${yen(m)}（${S.fixed[0]+S.fixed[1]>m?"余り "+yen(S.fixed[0]+S.fixed[1]-m):"不足 "+yen(m-S.fixed[0]-S.fixed[1])}）</p>`:""}
+  </section>
+
+  <section class="card s6"><h2>生活費の内訳</h2><p class="sub">「毎月の予算」で金額を変えるとここに反映されます</p>${donut()}</section>
+
+  <section class="card s6"><h2>光熱費は冬に跳ね上がります</h2>
+    <p class="sub">いちばん高い月は <b class="num" style="color:var(--ink)">${yen(uMax)}</b>、安い月の約${(uMax/Math.max(uMin,1)).toFixed(1)}倍。予算は年平均 ${yen(groupSum("util"))} で組んでいます</p>
+    ${utilChart()}
+    <p class="note">12〜3月は暖房（エアコン・灯油）で膨らむ想定。夏〜秋の余りを冬に回すのがコツです。</p>
+  </section>
+
+  <section class="card s12">
+    <div class="row between"><div><h2>今月の家計簿</h2><p class="sub">${ymLabel(todayStr().slice(0,7))}・予算 ${yen(m)} に対して</p></div><button class="btn small primary" data-go="log">記録する</button></div>
+    ${mExp.length? `<div class="stats"><div class="stat"><span class="l">使った金額</span><span class="v">${yen(spent)}</span></div><div class="stat"><span class="l">残り予算</span><span class="v ${m-spent<0?"over":""}">${yen(m-spent)}</span></div><div class="stat"><span class="l">記録数</span><span class="v">${mExp.length}件</span></div></div>
+    <div class="bar" style="margin-top:12px"><span style="width:${Math.min(100,spent/m*100)}%;background:${spent>m?"var(--bad)":"var(--accent)"}"></span></div>`
+    : `<div class="empty">まだ記録がありません。住み始めたら「家計簿」タブから支出を記録すると、予算との差と2人の精算額が自動で出ます。</div>`}
+  </section>
+  </div>`;
+}
+
+function viewInitial(){
+  const p=plan(), ex=S.initial.filter(x=>x.off).reduce((a,x)=>a+iAmt(x),0);
+  const needR = [0,1].map(i=> Math.ceil(p.need*shareOf(i,"ratio")/1000)*1000);
+  const groups = IGROUPS.map(g=>{ const items=S.initial.map((x,idx)=>[x,idx]).filter(([x])=>x.g===g.k);
+    const sum=items.filter(([x])=>!x.off).reduce((a,[x])=>a+iAmt(x),0);
+    return `<div class="group"><div class="ghead"><h3>${g.label}</h3><span class="num">${yen(sum)}</span></div>
+    ${items.map(([x,idx])=>`<div class="item chk ${x.off?"off":""}">
+      <input type="checkbox" id="off-${esc(x.id)}" data-f="initial.${idx}.off" data-bool ${x.off?"checked":""} aria-label="${esc(x.label)}を用意済み・不要にする" title="用意済み・不要ならチェック">
+      <input class="in lbl" id="il-${esc(x.id)}" data-f="initial.${idx}.label" value="${esc(x.label)}" aria-label="項目名">
+      ${yenInput("initial."+idx+".amt", iAmt(x), `data-clear-m="${idx}" aria-label="${esc(x.label)}の金額"`)}
+      <button class="icon" data-act="delInit" data-i="${idx}" aria-label="${esc(x.label)}を削除">×</button>
+      ${x.m!=null?`<div class="hint">家賃 × ${x.m}か月分で自動計算</div>`:""}
+    </div>`).join("")}
+    <button class="btn ghost small" data-act="addInit" data-g="${g.k}">＋ 項目を追加</button></div>`; }).join("");
+
+  return `<div class="grid">
+  <section class="card s5"><div class="stack">
+    <div><h2>貯金の計画</h2><p class="sub">チェックを入れた項目（持っている・不要）は目標額から外れます</p></div>
+    <div class="stats">
+      <div class="stat"><span class="l">初期費用</span><span class="v">${yen(initialNeeded())}</span></div>
+      <div class="stat"><span class="l">目標額</span><span class="v">${yen(p.tgt)}</span></div>
+    </div>
+    ${ex?`<p class="note" style="margin:0">用意済み・不要にした分 −${yen(ex).slice(1)}</p>`:""}
+    <label class="toggle"><input type="checkbox" id="cushion" data-f="savings.cushion" data-bool ${S.savings.cushion?"checked":""}> 生活費1か月分（${yen(monthly())}）も予備として貯める</label>
+    <label class="fld">いま2人で貯まっている金額${yenInput("savings.current", S.savings.current)}</label>
+    ${[0,1].map(i=>`<label class="fld"><span class="row between"><span>${esc(S.names[i])}が毎月貯める額</span><output class="num" id="out-sv${i}" style="color:var(--ink);font-weight:600">${yen(S.savings.monthly[i])}</output></span>
+      <input type="range" min="0" max="${Math.max(150000, Math.round(net(i)/10000)*10000)}" step="5000" id="sv${i}" data-f="savings.monthly.${i}" data-num data-out="out-sv${i}" value="${S.savings.monthly[i]}"></label>`).join("")}
+    <label class="fld">住み始めたい月<input class="in" type="month" id="movein" data-f="savings.moveIn" value="${esc(S.savings.moveIn)}"></label>
+    <div class="group stack" style="gap:10px">
+      <div class="ghead" style="margin:0"><h3>ボーナスから貯金する額</h3><span class="num">年 ${yen(p.bonusYear)}</span></div>
+      ${S.savings.bonuses.length? S.savings.bonuses.map((b,bi)=>`<div class="card flat" style="padding:12px;box-shadow:none">
+        <div class="row" style="gap:8px;flex-wrap:nowrap">
+          <input class="in" id="bn-label-${esc(b.id)}" data-f="savings.bonuses.${bi}.label" value="${esc(b.label)}" aria-label="ボーナスの名前" style="flex:1">
+          <select class="in" id="bn-m-${esc(b.id)}" data-f="savings.bonuses.${bi}.m" data-num style="width:84px" aria-label="支給月">${Array.from({length:12},(_,k)=>`<option value="${k+1}" ${+b.m===k+1?"selected":""}>${k+1}月</option>`).join("")}</select>
+          <button class="icon" data-act="delBonus" data-i="${bi}" aria-label="${esc(b.label)}を削除">×</button>
+        </div>
+        <div class="fields" style="grid-template-columns:1fr 1fr;gap:8px;margin-top:8px">
+          ${[0,1].map(i=>`<label class="fld">${esc(S.names[i])}${yenInput("savings.bonuses."+bi+".amt."+i, b.amt[i], 'step="10000" aria-label="'+esc(S.names[i])+'が'+esc(b.label)+'から貯金する額"')}</label>`).join("")}
+        </div></div>`).join("") : `<p class="note" style="margin:0">ボーナスがない場合はこのままでOKです</p>`}
+      <button class="btn ghost small" data-act="addBonus" style="align-self:flex-start">＋ ボーナスを追加</button>
+      <p class="note" style="margin:0">支給額ではなく「貯金に回す額」を入れてください。入れた月の貯金に自動で加わります。</p>
+    </div>
+  </div></section>
+
+  <section class="card s7"><div class="stack">
+    <div><h2>いつ引越せる？</h2><p class="sub">毎月の貯金${p.bonusYear?"とボーナス":""}を積み上げた見通し（月ごとの金額は下の表で変更できます）</p></div>
+    <div class="stats">
+      <div class="stat"><span class="l">目標まであと</span><span class="v">${yen(p.rem)}</span></div>
+      <div class="stat"><span class="l">達成まで</span><span class="v">${isFinite(p.months)? p.months+"か月":"—"}</span></div>
+      <div class="stat"><span class="l">達成見込み</span><span class="v">${p.months===0?"達成済み": p.reach? ymLabel(p.reach):"貯金額を入力"}</span></div>
+    </div>
+    ${savingsChart(p)}
+    <div class="callout ${p.atMoveIn>=p.tgt?"":"warn"}">
+      <b>${ymLabel(S.savings.moveIn)}入居</b>（あと${p.until}か月）の時点で貯金は <b class="num">${yen(p.atMoveIn)}</b>${p.atMoveIn>=p.tgt?"で、目標に届きます。":`。あと <b class="num">${yen(p.tgt-p.atMoveIn)}</b> 足りません。`}
+      ${p.bonusBefore?`入居までのボーナス分 ${yen(p.bonusBefore)} を差し引くと、`:""}間に合わせるのに必要な毎月の貯金は <b class="num">${yen(Math.ceil(p.need/1000)*1000)}</b>。
+      収入比で分けると ${esc(S.names[0])} <b class="num">${yen(needR[0])}</b>・${esc(S.names[1])} <b class="num">${yen(needR[1])}</b> です。
+    </div>
+    <p class="note" style="margin:0">実家暮らしなら今のうちに貯金を多めに。家電を片方の一人暮らしから持ち寄ると、目標額を10〜20万円下げられます。</p>
+  </div></section>
+
+  ${scheduleCard(p)}
+
+  <section class="card s12"><h2>初期費用のチェックリスト</h2>
+    <p class="sub">松本・塩尻・安曇野の賃貸でよくある条件で試算。物件が決まったら見積もりの金額に書き換えてください</p>
+    <div class="stack">${groups}</div>
+  </section>
+  </div>`;
+}
+
+function scheduleCard(p){
+  const N = Math.min(48, Math.max(12, p.until+1, isFinite(p.months)? p.months+1 : 0));
+  let cum=p.cur, rows="";
+  const moveYm=S.savings.moveIn, reachYm=p.reach;
+  for(let i=0;i<N;i++){
+    const r=monthRow(addMonths(p.nowYm,i)); cum+=r.total;
+    const isMove=r.ym===moveYm, isReach=r.ym===reachYm, bsum=r.bonus[0]+r.bonus[1];
+    const cell = k=>`<td><span class="yenwrap" style="display:inline-block;width:118px"><input class="in yen ${r.ov?"ov":""}" type="number" inputmode="numeric" min="0" step="5000" id="ov-${esc(r.ym)}-${k}" data-ov="${esc(r.ym)}" data-p="${k}" value="${r.reg[k]}" aria-label="${ymLabel(r.ym)}の${esc(S.names[k])}の貯金額"></span></td>`;
+    rows += `<tr class="${isMove?"cur":""}">
+      <td><span style="font-weight:${isMove?700:500}">${Number(r.ym.slice(5))===1||i===0? r.ym.slice(0,4)+"年":""}${Number(r.ym.slice(5))}月</span>
+        ${isMove?`<span class="pill neutral" style="margin-left:6px;background:var(--pb-soft);color:var(--pb)">入居したい月</span>`:""}
+        ${isReach?`<span class="pill good" style="margin-left:6px">目標達成</span>`:""}</td>
+      ${cell(0)}${cell(1)}
+      <td class="num">${bsum? `<span style="color:var(--accent);font-weight:600">＋${yen(bsum).slice(1)}</span>`:`<span style="color:var(--faint)">—</span>`}</td>
+      <td class="num" style="font-weight:600">${yen(r.total)}</td>
+      <td class="num">${yen(cum)}</td>
+      <td style="width:36px">${r.ov?`<button class="icon" data-act="resetOv" data-ym="${esc(r.ym)}" aria-label="${ymLabel(r.ym)}をふだんの額に戻す" title="ふだんの額に戻す" style="color:var(--accent)">↺</button>`:""}</td>
+    </tr>`;
+  }
+  const nOv=Object.keys(S.savings.overrides||{}).length;
+  return `<section class="card s12">
+    <div class="row between"><div><h2>月ごとの貯金スケジュール</h2>
+      <p class="sub">金額を書き換えると、その月だけ変更されます（帰省や旅行で少ない月、臨時収入で多い月など）。色つきの欄が変更した月です</p></div>
+      ${nOv?`<button class="btn small" data-act="resetAllOv">すべてふだんの額に戻す（${nOv}か月分）</button>`:""}</div>
+    <div class="tablewrap"><table class="sched" style="min-width:720px">
+      <thead><tr><th>月</th><th>${esc(S.names[0])}</th><th>${esc(S.names[1])}</th><th>ボーナス</th><th>その月の合計</th><th>貯金の累計</th><th></th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <p class="note">累計は「いまの貯金 ${yen(p.cur)}」からスタート。ボーナスの金額は左の「ボーナスから貯金する額」で変更できます。</p>
+  </section>`;
+}
+
+function viewBudget(){
+  const m=monthly(), area=areaOf(S.area);
+  const groups = GROUPS.map(g=>{ const items=S.budget.map((b,idx)=>[b,idx]).filter(([b])=>b.g===g.k);
+    return `<div class="group"><div class="ghead"><h3><i style="background:var(--c-${g.k})"></i>${g.label}</h3><span class="num">${yen(groupSum(g.k))}</span></div>
+    ${items.map(([b,idx])=>`<div class="item">
+      <input class="in lbl" id="bl-${esc(b.id)}" data-f="budget.${idx}.label" value="${esc(b.label)}" aria-label="項目名">
+      ${yenInput("budget."+idx+".amt", b.amt, `aria-label="${esc(b.label)}の金額"`)}
+      <button class="icon" data-act="delBud" data-i="${idx}" aria-label="${esc(b.label)}を削除">×</button></div>`).join("")}
+    <button class="btn ghost small" data-act="addBud" data-g="${g.k}">＋ 項目を追加</button></div>`; }).join("");
+
+  const rows = ["ratio","half","fixed"].map(h=>{ const a=payOf(0,h), b=payOf(1,h);
+    return `<tr class="${S.split===h?"cur":""}"><td>${SPLIT_LABEL[h]}</td><td class="num">${yen(a)}</td><td class="num">${yen(b)}</td><td class="num">${yen(net(0)-a)}</td><td class="num">${yen(net(1)-b)}</td></tr>`; }).join("");
+
+  return `<div class="grid">
+  <section class="card s6"><div class="stack">
+    <div><h2>2人の収入</h2><p class="sub">名前もここで変えられます</p></div>
+    <div class="fields">
+      ${[0,1].map(i=>`<div class="stack" style="gap:8px"><label class="fld">名前<input class="in" id="name${i}" data-f="names.${i}" value="${esc(S.names[i])}" maxlength="12"></label>
+      <label class="fld">月の収入${yenInput("incomes."+i, S.incomes[i])}</label></div>`).join("")}
+    </div>
+    <div class="row between"><span style="font-size:13px;color:var(--muted)">入力した収入は</span>
+      <div class="choice" role="group" aria-label="収入の種類">
+        <button data-set="incomeType" data-v="net" aria-pressed="${S.incomeType==="net"}">手取り</button>
+        <button data-set="incomeType" data-v="gross" aria-pressed="${S.incomeType==="gross"}">額面（税・保険料の前）</button>
+      </div></div>
+    <div class="callout"><b>住むエリア</b>
+      <div class="choice" role="group" aria-label="エリア" style="margin:8px 0">${Object.entries(AREAS).map(([k,a])=>`<button data-act="area" data-v="${k}" aria-pressed="${S.area===k}">${a.label}</button>`).join("")}</div>
+      <div style="font-size:13px">${area.note}</div>
+      <p class="note">エリアを切り替えると、ガス代と駐車場代が目安の金額に変わります。どちらも物件ごとの差が大きいので、内見のときに必ず確認を。</p>
+    </div>
+  </div></section>
+
+  <section class="card s6"><div class="stack">
+    <div><h2>分担のしかた</h2><p class="sub">まだ決めていなくても、3つの方法を並べて比べられます</p></div>
+    <div class="choice" role="group" aria-label="分担方法">${Object.entries(SPLIT_LABEL).map(([k,l])=>`<button data-set="split" data-v="${k}" aria-pressed="${S.split===k}">${l}</button>`).join("")}</div>
+    ${S.split==="fixed"? `<div class="fields">${[0,1].map(i=>`<label class="fld">${esc(S.names[i])}の入金額${yenInput("fixed."+i, S.fixed[i])}</label>`).join("")}</div>
+      <p class="note" style="margin:0">入金合計 ${yen(+S.fixed[0]+ +S.fixed[1])}／生活費 ${yen(m)}</p>`:""}
+    <div class="tablewrap"><table>
+      <thead><tr><th>方法</th><th>${esc(S.names[0])}の負担</th><th>${esc(S.names[1])}の負担</th><th>${esc(S.names[0])}の残り</th><th>${esc(S.names[1])}の残り</th></tr></thead>
+      <tbody>${rows}</tbody></table></div>
+    <p class="note" style="margin:0"><b>収入比</b>は2人の残りの割合がそろうので不満が出にくい方法。<b>折半</b>はわかりやすい反面、収入の少ない側が苦しくなりがち。<b>定額</b>は共通口座に毎月同じ額を入れ、食費や日用品もそこから払う方法です。</p>
+  </div></section>
+
+  <section class="card s12">
+    <div class="row between"><div><h2>毎月の予算</h2><p class="sub">合計 <b class="num" style="color:var(--ink)">${yen(m)}</b>・光熱費は1年の平均額で入力（季節の変化はホームのグラフに反映）</p></div>
+      <button class="btn small" data-act="resetBudget">目安の金額に戻す</button></div>
+    <div class="grid" style="margin-top:6px">
+      <div class="s6 stack">${groups.split('<div class="group">').filter(Boolean).slice(0,4).map(x=>'<div class="group">'+x).join("")}</div>
+      <div class="s6 stack">${groups.split('<div class="group">').filter(Boolean).slice(4).map(x=>'<div class="group">'+x).join("")}</div>
+    </div>
+  </section>
+
+  ${syncCard()}
+
+  <section class="card s12 flat"><h2>データのバックアップ</h2>
+    <p class="sub">設定と家計簿をテキストでコピーして保存できます。別の画面に貼り付けて読み込むことも可能です</p>
+    <div class="row"><button class="btn small" data-act="export">コピーする</button><button class="btn small" data-act="import">貼り付けたデータを読み込む</button></div>
+    <textarea class="in" id="backup" style="margin-top:10px" placeholder="ここにバックアップのテキストを貼り付け" aria-label="バックアップデータ"></textarea>
+  </section>
+  </div>`;
+}
+
+function viewLog(){
+  const list=expenses.filter(e=>(e.date||"").slice(0,7)===month).sort((a,b)=>(b.date||"").localeCompare(a.date||"")||(b.createdAt||0)-(a.createdAt||0));
+  const total=list.reduce((a,e)=>a+(+e.amount||0),0), m=monthly();
+  const bva = GROUPS.map(g=>{ const bud=groupSum(g.k), act=list.filter(e=>e.cat===g.k).reduce((a,e)=>a+(+e.amount||0),0);
+    if(!bud && !act) return ""; const pct=bud? act/bud : (act?1.2:0); const over=act>bud;
+    return `<div class="r"><span>${g.label}</span><div class="track"><span style="width:${Math.min(100,pct*100)}%;background:${over?"var(--bad)":`var(--c-${g.k})`}"></span></div>
+    <span class="amt"><b class="${over?"over":""}">${yen(act)}</b> / ${yen(bud)}</span></div>`; }).join("");
+  const paid=[0,1].map(i=>list.filter(e=>e.payer===i).reduce((a,e)=>a+(+e.amount||0),0));
+  const personal=paid[0]+paid[1]; const should=[0,1].map(i=>personal*shareOf(i)); const diff=paid[0]-should[0];
+  const settle = !personal? `<div class="empty" style="padding:12px">個人のお財布で払った記録がまだありません</div>` :
+    Math.abs(diff)<100? `<div class="callout">今月は精算なしでOKです</div>` :
+    `<div class="callout"><b>${esc(S.names[diff>0?1:0])}</b> → <b>${esc(S.names[diff>0?0:1])}</b> に <b class="num" style="font-size:20px">${yen(Math.abs(diff))}</b> 渡すと精算完了</div>`;
+  const PAYER=[["a",0],["b",1],["j","joint"]];
+  return `<div class="grid">
+  <section class="card s5"><form id="expForm" class="stack" autocomplete="off">
+    <div><h2>支出を記録</h2><p class="sub">レシートを見ながらサッと入力</p></div>
+    <label class="fld">金額<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="1" id="e-amount" required placeholder="0" style="font-size:22px;padding-block:10px"></span></label>
+    <div class="fields">
+      <label class="fld">日付<input class="in" type="date" id="e-date" value="${esc(month===todayStr().slice(0,7)?todayStr():month+"-01")}" required></label>
+      <label class="fld">カテゴリ<select class="in" id="e-cat">${GROUPS.map(g=>`<option value="${g.k}" ${g.k==="food"?"selected":""}>${g.label}</option>`).join("")}</select></label>
+    </div>
+    <div class="fld">払った人
+      <div class="choice" role="group" aria-label="払った人" id="e-payer">
+        <button type="button" class="pa" data-payer="0" aria-pressed="true">${esc(S.names[0])}</button>
+        <button type="button" class="pb" data-payer="1" aria-pressed="false">${esc(S.names[1])}</button>
+        <button type="button" data-payer="joint" aria-pressed="false">共通口座</button>
+      </div></div>
+    <label class="fld">メモ（任意）<input class="in" id="e-memo" maxlength="40" placeholder="例：イオン松本で週末の買い出し"></label>
+    <button class="btn primary" type="submit">記録する</button>
+  </form></section>
+
+  <section class="card s7"><div class="stack">
+    <div class="row between"><div><h2>予算と実績</h2><p class="sub">使った金額 <b class="num" style="color:var(--ink)">${yen(total)}</b> ／ 予算 ${yen(m)}</p></div>
+      <input class="in" type="month" id="logMonth" value="${esc(month)}" style="width:auto" aria-label="表示する月"></div>
+    <div class="bva">${bva}</div>
+    <div><h2 style="font-size:15px">今月の精算</h2><p class="sub">${esc(splitLabel(S.split))}の割合（${Math.round(shareOf(0)*100)}:${Math.round(shareOf(1)*100)}）で計算。共通口座からの支払いは対象外</p>
+      <div class="people" style="margin-bottom:10px">${[0,1].map(i=>`<div class="person ${i?"b":"a"}"><div class="n">${esc(S.names[i])}が払った</div><div class="v">${yen(paid[i])}</div><div class="m">本来の負担 ${yen(should[i])}</div></div>`).join("")}</div>
+      ${settle}</div>
+  </div></section>
+
+  <section class="card s12"><h2>${ymLabel(month)}の記録</h2><p class="sub">${list.length}件</p>
+    ${list.length? `<ul class="explist">${list.map(e=>{ const pk = e.payer===0?"a":e.payer===1?"b":"j"; const pn = e.payer===0?S.names[0]:e.payer===1?S.names[1]:"共通口座";
+      return `<li><span class="d">${Number((e.date||"").slice(5,7))}/${Number((e.date||"").slice(8,10))}</span>
+      <span class="t"><b>${esc(e.memo||glabel(e.cat)||"支出")}</b><small><i style="background:var(--c-${esc(e.cat)})"></i>${esc(glabel(e.cat))}<span class="tag ${pk}">${esc(pn)}</span></small></span>
+      <span class="a">${yen(e.amount)}</span><button class="icon" data-act="delExp" data-id="${esc(e.id)}" aria-label="この記録を削除">×</button></li>`; }).join("")}</ul>`
+    : `<div class="empty">この月の記録はまだありません</div>`}
+  </section>
+  </div>`;
+}
+
+function render(){
+  $("#nameA").textContent=S.names[0]; $("#nameB").textContent=S.names[1];
+  $("#dotA").textContent=(S.names[0]||"A").slice(0,1); $("#dotB").textContent=(S.names[1]||"B").slice(0,1);
+  document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===tab));
+  const v=$("#view");
+  v.innerHTML = tab==="home"?viewHome(): tab==="initial"?viewInitial(): tab==="budget"?viewBudget(): viewLog();
+}
+
+/* ---------- 操作 ---------- */
+function setPath(path, val){
+  const ks=path.split("."); let o=S; for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=val;
+}
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1800); }
+function commit(){ scheduleSave(); render(); }
+
+document.addEventListener("click", async e=>{
+  const t=e.target.closest("button"); if(!t) return;
+  if (t.dataset.tab){ tab=t.dataset.tab; render(); window.scrollTo({top:0}); return; }
+  if (t.dataset.go){ tab=t.dataset.go; render(); window.scrollTo({top:0}); return; }
+  if (t.dataset.set){ S[t.dataset.set]=t.dataset.v; commit(); return; }
+  if (t.dataset.payer!=null){ t.parentElement.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed", b===t)); return; }
+  const act=t.dataset.act; if(!act) return;
+  if (act==="area"){ const a=areaOf(t.dataset.v); if(!AREAS[t.dataset.v]) return; S.area=t.dataset.v;
+    const g=S.budget.find(b=>b.id==="gas"); if(g){g.amt=a.gas; g.label=a.gasLabel;}
+    const p=S.budget.find(b=>b.id==="park"); if(p) p.amt=a.park; commit(); toast(a.label+"の目安にしました"); }
+  if (act==="toggleEdit"){ editBudget=!editBudget; render(); if(editBudget){ const q=$("#quickEdit"); if(q) q.scrollIntoView({behavior:"smooth",block:"start"}); } return; }
+  if (act==="addBonus"){ S.savings.bonuses.push({id:uid(),label:"ボーナス",m:7,amt:[0,0]}); commit(); }
+  if (act==="delBonus"){ S.savings.bonuses.splice(+t.dataset.i,1); commit(); }
+  if (act==="resetOv"){ delete S.savings.overrides[t.dataset.ym]; commit(); }
+  if (act==="resetAllOv"){ if(confirm("月ごとに変更した貯金額を、すべてふだんの額に戻しますか？")){ S.savings.overrides={}; commit(); toast("ふだんの額に戻しました"); } }
+  if (act==="addBud"){ S.budget.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0}); commit(); }
+  if (act==="delBud"){ S.budget.splice(+t.dataset.i,1); commit(); }
+  if (act==="addInit"){ S.initial.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0,off:false}); commit(); }
+  if (act==="delInit"){ S.initial.splice(+t.dataset.i,1); commit(); }
+  if (act==="resetBudget"){ if(confirm("毎月の予算を目安の金額に戻しますか？（収入や家計簿はそのままです）")){ S.budget=clone(DEFAULT.budget); const a=areaOf(S.area); const g=S.budget.find(b=>b.id==="gas"); g.amt=a.gas; g.label=a.gasLabel; S.budget.find(b=>b.id==="park").amt=a.park; commit(); toast("目安の金額に戻しました"); } }
+  if (act==="delExp"){ const id=t.dataset.id;
+    if (!canWrite()){ nudge(); return; }
+    deletedIds.add(id); expenses=expenses.filter(x=>x.id!==id); saveExpensesSoon(); render(); toast("削除しました"); }
+  if (act==="ghConnect"){ const el=$("#ghToken"); const v=el?el.value:""; if(el) el.value=""; await ghConnect(v); return; }
+  if (act==="ghDisconnect"){ ghDisconnect(); return; }
+  if (act==="ghSync"){ await pull(); render(); toast("読み込みました"); return; }
+  if (act==="export"){ const txt=JSON.stringify({settings:S, expenses}); $("#backup").value=txt;
+    try{ await navigator.clipboard.writeText(txt); toast("コピーしました"); }catch(err){ $("#backup").select(); toast("テキストを選択しました。コピーして保存してください"); } }
+  if (act==="import"){ try{ const d=JSON.parse($("#backup").value); if(!d.settings) throw 0;
+      if(!confirm("いまの設定をバックアップの内容で置き換えますか？")) return;
+      S=normalize(d.settings); scheduleSave();
+      const add=(d.expenses||[]).filter(x=>!expenses.some(y=>y.id===x.id));
+      expenses=expenses.concat(add); saveExpensesSoon();
+      render(); toast("読み込みました"); }catch(err){ toast("読み込めませんでした。コピーしたテキストをそのまま貼り付けてください"); } }
+});
+
+document.addEventListener("keydown", e=>{
+  const el=e.target; if(e.key==="Enter" && el.dataset && (el.dataset.f||el.dataset.ov) && el.tagName==="INPUT"){ e.preventDefault(); el.blur(); }
+});
+document.addEventListener("input", e=>{
+  const el=e.target; if(el.type==="range" && el.dataset.f){ setPath(el.dataset.f, +el.value); const o=document.getElementById(el.dataset.out); if(o) o.textContent=yen(+el.value); }
+});
+document.addEventListener("change", e=>{
+  const el=e.target;
+  if (el.id==="logMonth"){ if(el.value){ month=el.value; render(); } return; }
+  if (el.dataset && el.dataset.ov){
+    const ym=el.dataset.ov, k=+el.dataset.p, val=Math.max(0,Math.round(+el.value||0));
+    const cur=S.savings.overrides[ym] || [null,null]; cur[k]=val;
+    const base=[0,1].map(i=>+S.savings.monthly[i]||0);
+    if ((cur[0]==null||cur[0]===base[0]) && (cur[1]==null||cur[1]===base[1])) delete S.savings.overrides[ym];
+    else S.savings.overrides[ym]=cur;
+  } else if (!el.dataset || !el.dataset.f) return;
+  if (el.dataset.f){
+  let v = el.dataset.bool!=null ? el.checked : el.dataset.num!=null ? Math.max(0, Math.round(+el.value||0)) : el.value;
+  if (el.dataset.f.startsWith("names.") && !String(v).trim()) v = el.dataset.f.endsWith("0")?"あなた":"パートナー";
+  setPath(el.dataset.f, v);
+  if (el.dataset.clearM!=null){ const it=S.initial[+el.dataset.clearM]; if(it) delete it.m; }
+  }
+  /* 再描画しても、Tabで移った先の入力欄にフォーカスを戻す */
+  setTimeout(()=>{
+    const a=document.activeElement, id=a&&a.id, y=window.scrollY;
+    commit();
+    if (id){ const n=document.getElementById(id); if(n){ n.focus({preventScroll:true}); if(n.type==="number") n.select(); } }
+    window.scrollTo({top:y});
+  },0);
+});
+document.addEventListener("focusout", ()=>{ setTimeout(()=>{ if(pending && !editing()){ S=pending; pending=null; render(); } }, 60); });
+
+document.addEventListener("submit", async e=>{
+  if (e.target.id!=="expForm") return; e.preventDefault();
+  const amount=Math.round(+$("#e-amount").value||0); if(amount<=0){ toast("金額を入力してください"); return; }
+  const pb=document.querySelector('#e-payer [aria-pressed="true"]'); const pv=pb?pb.dataset.payer:"0";
+  const rec={date:$("#e-date").value||todayStr(), cat:$("#e-cat").value, amount, payer: pv==="joint"?"joint":+pv, memo:$("#e-memo").value.trim(), createdAt:Date.now()};
+  if (!canWrite()){ nudge(); return; }
+  expenses.push(Object.assign({id:uid()},rec)); saveExpensesSoon();
+  if (rec.date.slice(0,7)!==month) month=rec.date.slice(0,7);
+  render(); toast(yen(amount)+" を記録しました");
+  const a=$("#e-amount"); if(a) a.focus();
+});
+
+boot();
+})();
+</script>
+
+</body></html>
