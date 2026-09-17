@@ -403,7 +403,9 @@ const GH = {
    ブラウザからは「Failed to fetch」としか見えなくなる */
 const API = "https://api.github.com/repos/"+GH.owner+"/"+GH.repo;
 const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算」タブの『2人で同期する』からつなぐと保存できます";
-const POLL_MS = { github:30000, readonly:300000 };
+/* 相手の変更を読みに行く間隔。トークンありは1時間5,000回まで使えるので、10秒でも
+   2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
+const POLL_MS = { github:10000, readonly:300000 };
 const TOKEN_KEY = "futari.token";
 
 let token = "";
@@ -681,7 +683,7 @@ function syncCard(){
   const body = mode==="github"
     ? `<p style="margin:0">この端末はGitHubにつながっています。入力するたびに
         <code>${GH.paths.settings}</code> と <code>${GH.paths.expenses}</code> が更新され、
-        もう1人の画面にも30秒ほどで反映されます。</p>
+        もう1人の画面にも10秒ほどで反映されます。</p>
       <div class="row"><button class="btn primary small" data-act="ghInvite">相手用の招待リンクをコピー</button>
         <button class="btn small" data-act="ghSync">今すぐ読み込む</button>
         <button class="btn small" data-act="ghDisconnect">この端末の接続をやめる</button></div>
