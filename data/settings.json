@@ -6,9 +6,9 @@
  ],
  "incomes": [
   200000,
-  150000
+  16500
  ],
- "incomeType": "net",
+ "incomeType": "gross",
  "area": "matsumoto",
  "split": "ratio",
  "fixed": [
