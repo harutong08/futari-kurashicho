@@ -202,6 +202,22 @@ svg text{font-family:var(--f-num)}
 .toast.show{opacity:1}
 @media (prefers-reduced-motion: reduce){.toast{transition:none}}
 textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
+
+/* chat */
+.chatwrap{display:flex;flex-direction:column;gap:8px;max-height:58vh;overflow-y:auto;padding:6px 2px;overscroll-behavior:contain}
+.msg{display:flex;gap:8px;align-items:flex-end}
+.msg.mine{flex-direction:row-reverse}
+.bub{max-width:min(78%,560px);padding:9px 13px;border-radius:16px;background:var(--surface-2);border:1px solid var(--line);white-space:pre-wrap;word-break:break-word;font-size:14.5px;line-height:1.55}
+.msg.mine .bub{background:var(--accent);color:var(--on-accent);border-color:transparent;border-bottom-right-radius:5px}
+.msg:not(.mine) .bub{border-bottom-left-radius:5px}
+.msg .when{font-size:11px;color:var(--faint);white-space:nowrap;padding-bottom:3px}
+.msg .icon{width:24px;height:24px;font-size:13px;opacity:0;transition:opacity .15s}
+.msg:hover .icon,.msg:focus-within .icon{opacity:1}
+@media (hover:none){.msg .icon{opacity:.5}}
+.daysep{align-self:center;font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);padding:2px 12px;border-radius:99px;margin:6px 0}
+.chatform{display:flex;gap:8px;margin-top:12px}
+.chatform .in{flex:1}
+.tabdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-left:5px;vertical-align:middle}
 </style>
 
 <div class="wrap">
@@ -223,6 +239,7 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
       <button role="tab" data-tab="initial" aria-selected="false">初期費用と貯金</button>
       <button role="tab" data-tab="budget" aria-selected="false">毎月の予算</button>
       <button role="tab" data-tab="log" aria-selected="false">家計簿</button>
+      <button role="tab" data-tab="chat" aria-selected="false">チャット</button>
     </div>
   </nav>
   <main id="view"></main>
@@ -330,6 +347,7 @@ function monthsBetween(a,b){ const [y1,m1]=a.split("-").map(Number),[y2,m2]=b.sp
 let S = clone(DEFAULT);
 S.savings.moveIn = addMonths(todayStr().slice(0,7), 9);
 let expenses = [];
+let chat = [];
 let tab = "home";
 let editBudget = false;
 let month = todayStr().slice(0,7);
@@ -397,7 +415,7 @@ function utilByMonth(){
    リポジトリには絶対に書き込まない（保存されるのは settings.json / expenses.json だけ）。 */
 const GH = {
   owner:"harutong08", repo:"futari-kurashicho", branch:"main",
-  paths:{ settings:"data/settings.json", expenses:"data/expenses.json" }
+  paths:{ settings:"data/settings.json", expenses:"data/expenses.json", chat:"data/chat.json" }
 };
 /* 末尾に / を付けないこと。付けるとGitHubが400を返し、その応答にはCORSヘッダが無いので
    ブラウザからは「Failed to fetch」としか見えなくなる */
@@ -416,9 +434,16 @@ let pending = null;          /* 入力中に届いたリモートの設定 */
 let localDirty = false;      /* 見るだけの状態で編集してしまった */
 let saveTimer = null, expTimer = null, pollTimer = null;
 let busy = 0, lastErr = "";
-let sha = { settings:null, expenses:null };
-let pushed = { settings:null, expenses:null };
+let sha = { settings:null, expenses:null, chat:null };
+let pushed = { settings:null, expenses:null, chat:null };
 let syncedIds = new Set();   /* GitHub側にあると分かっている支出のid */
+let syncedChat = new Set();
+let deletedChat = new Set();
+const MSG_MAX = 500;         /* 残す発言の数。古いものから落とす */
+const ME_KEY = "futari.me", SEEN_KEY = "futari.chatseen";
+let me = null;               /* この端末を使っているのはどちらか（0 or 1） */
+let chatSeen = 0;            /* ここまでは読んだ、という時刻 */
+let chatTimer = null;
 let deletedIds = new Set();  /* この端末で消した支出のid（復活を防ぐ） */
 let lastNudge = 0;
 let connectErr = "";   /* つなげなかった理由。カードに出したままにする */
@@ -571,11 +596,15 @@ function setSync(){
 
 function saveLocalSettings(){ try{ localStorage.setItem("futari.settings", JSON.stringify(S)); }catch(e){} }
 function saveLocalExpenses(){ try{ localStorage.setItem("futari.expenses", JSON.stringify(expenses)); }catch(e){} }
+function saveLocalChat(){ try{ localStorage.setItem("futari.chat", JSON.stringify(chat)); }catch(e){} }
 function editing(){ const a=document.activeElement; return a && /INPUT|TEXTAREA|SELECT/.test(a.tagName) && a.closest("#view"); }
 
 function loadLocal(){
   try{ const s=localStorage.getItem("futari.settings"); if(s) S=normalize(JSON.parse(s)); }catch(e){}
   try{ const x=localStorage.getItem("futari.expenses"); if(x) expenses=JSON.parse(x)||[]; }catch(e){}
+  try{ const c=localStorage.getItem("futari.chat"); if(c) chat=JSON.parse(c)||[]; }catch(e){}
+  try{ const m=localStorage.getItem(ME_KEY); if(m==="0"||m==="1") me=+m; }catch(e){}
+  try{ chatSeen=+(localStorage.getItem(SEEN_KEY)||0)||0; }catch(e){}
 }
 
 function scheduleSave(){
@@ -615,6 +644,60 @@ function mergeExp(remote, local){
   (local||[]).forEach(e=>{ if(e&&e.id && !deletedIds.has(e.id)) map.set(e.id,e); });
   return sortExp([...map.values()]);
 }
+function saveChatSoon(){
+  saveLocalChat();
+  if (mode!=="github"){ if(mode==="readonly") markDirty(); return; }
+  clearTimeout(chatTimer);
+  chatTimer=setTimeout(pushChat, 300);
+}
+function sortChat(list){ return list.slice().sort((a,b)=>(a.at||0)-(b.at||0)); }
+function mergeChat(remote, local){
+  const map=new Map();
+  (remote||[]).forEach(m=>{ if(m&&m.id && !deletedChat.has(m.id)) map.set(m.id,m); });
+  (local||[]).forEach(m=>{ if(m&&m.id && !deletedChat.has(m.id)) map.set(m.id,m); });
+  return sortChat([...map.values()]).slice(-MSG_MAX);
+}
+async function pushChat(){
+  if (mode!=="github" || locked) return;
+  busy++; setSync();
+  try{
+    for (let i=0;i<3;i++){
+      const g=await ghGet("chat");
+      const opened=g.missing? [] : await open(g.data);
+      if (opened===undefined){ lastErr="合言葉が合いません"; break; }
+      const merged=mergeChat(Array.isArray(opened)?opened:[], chat);
+      const json=JSON.stringify(merged);
+      if (!g.missing && json===pushed.chat){ sha.chat=g.sha; break; }
+      const r=await ghPut("chat", await seal(merged), g.sha, "家計：チャットを更新");
+      if (r.conflict) continue;
+      sha.chat=r.sha; pushed.chat=json; lastErr="";
+      chat=merged; syncedChat=new Set(merged.map(m=>m.id)); saveLocalChat();
+      if (!editing()) render();
+      break;
+    }
+  }catch(e){ lastErr=e.message; toast("送れませんでした："+e.message); }
+  busy--; setSync();
+}
+function adoptChat(remote){
+  const list=Array.isArray(remote)? remote.filter(m=>m&&m.id && !deletedChat.has(m.id)) : [];
+  const ids=new Set(list.map(m=>m.id));
+  const unsent=chat.filter(m=>m&&m.id && !ids.has(m.id) && !syncedChat.has(m.id));
+  const next=sortChat(list.concat(unsent)).slice(-MSG_MAX);
+  syncedChat=ids;
+  const changed=JSON.stringify(next)!==JSON.stringify(chat);
+  chat=next; saveLocalChat();
+  if (!unsent.length) pushed.chat=JSON.stringify(next);
+  return changed;
+}
+function unreadCount(){
+  if (me===null) return 0;
+  return chat.filter(m=>m.who!==me && (m.at||0)>chatSeen).length;
+}
+function markChatSeen(){
+  const last=chat.length? Math.max(...chat.map(m=>m.at||0)) : 0;
+  if (last>chatSeen){ chatSeen=last; try{ localStorage.setItem(SEEN_KEY, String(chatSeen)); }catch(e){} }
+}
+
 async function pushExpenses(){
   if (mode!=="github") return;
   busy++; setSync();
@@ -662,12 +745,13 @@ function adoptExpenses(remote){
 async function pull(){
   if (mode==="local" || localDirty || busy) return;
   try{
-    const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
+    const [gs,ge,gc]=await Promise.all([ghGet("settings"), ghGet("expenses"), ghGet("chat")]);
     lastErr="";
     let changed=false;
     const wasLocked=locked;
     if (gs.missing){ sha.settings=null; } else { sha.settings=gs.sha; const v=await open(gs.data); if(v) changed=adoptSettings(v)||changed; }
     if (ge.missing){ sha.expenses=null; syncedIds=new Set(); } else { sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) changed=adoptExpenses(v)||changed; }
+    if (gc.missing){ sha.chat=null; syncedChat=new Set(); } else { sha.chat=gc.sha; const v=await open(gc.data); if(v!==undefined) changed=adoptChat(v)||changed; }
     if ((changed || locked!==wasLocked) && !editing()) render();
   }catch(e){ lastErr=e.message; }
   setSync();
@@ -734,9 +818,11 @@ async function boot(){
     mode = token ? "github" : "readonly";
     if (!gs.missing){ sha.settings=gs.sha; const v=await open(gs.data); if(v) adoptSettings(v); }
     if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) adoptExpenses(v); }
+    const gc=await ghGet("chat").catch(()=>({missing:true}));
+    if (!gc.missing){ sha.chat=gc.sha; const v=await open(gc.data); if(v!==undefined) adoptChat(v); }
     render(); setSync(); startPoll();
     if (invite.token && mode==="github" && !locked) toast("招待リンクからつなぎました");
-    if (mode==="github" && !locked){ await pushSettings(); if(expenses.length) await pushExpenses(); }
+    if (mode==="github" && !locked){ await pushSettings(); if(expenses.length) await pushExpenses(); if(chat.length) await pushChat(); }
   }catch(e){
     mode="local"; lastErr=e.message; setSync();
     if (invite.token){ try{ localStorage.removeItem(TOKEN_KEY); }catch(e2){} }
@@ -1166,6 +1252,54 @@ function viewLog(){
   </div>`;
 }
 
+function dayLabel(ms){
+  const d=new Date(ms), t=new Date(), y=new Date(t.getTime()-86400000);
+  const same=(a,b)=>a.getFullYear()===b.getFullYear()&&a.getMonth()===b.getMonth()&&a.getDate()===b.getDate();
+  if (same(d,t)) return "今日";
+  if (same(d,y)) return "昨日";
+  return (d.getMonth()+1)+"月"+d.getDate()+"日";
+}
+function hhmm(ms){ const d=new Date(ms); return String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
+
+function viewChat(){
+  if (me===null){
+    return `<div class="grid"><section class="card s12" style="max-width:480px;margin:24px auto">
+      <h2>この端末を使うのはどちら？</h2>
+      <p class="sub">発言がどちらのものか分けるために、一度だけ選んでください。あとから変えられます。</p>
+      <div class="row" style="gap:10px">
+        ${[0,1].map(i=>`<button class="btn ${i?"":"primary"}" data-act="setMe" data-i="${i}" style="flex:1">
+          <span class="dot ${i?"b":"a"}" style="margin-right:6px">${esc((S.names[i]||"").slice(0,1))}</span>${esc(S.names[i])}</button>`).join("")}
+      </div></section></div>`;
+  }
+  const list=sortChat(chat);
+  let last="", rows="";
+  if (!list.length){
+    rows=`<div class="empty">まだ何もありません。買い物の相談や「今日ごはんいる？」など、気軽にどうぞ。</div>`;
+  } else {
+    list.forEach(m=>{
+      const d=dayLabel(m.at||0);
+      if (d!==last){ rows+=`<div class="daysep">${esc(d)}</div>`; last=d; }
+      const mine=m.who===me;
+      rows+=`<div class="msg ${mine?"mine":""}">
+        <div class="bub">${esc(m.text||"")}</div>
+        <span class="when">${esc(hhmm(m.at||0))}</span>
+        ${mine?`<button class="icon" data-act="delMsg" data-id="${esc(m.id)}" aria-label="この発言を消す" title="消す">×</button>`:""}
+      </div>`;
+    });
+  }
+  return `<div class="grid"><section class="card s12">
+    <div class="row between"><div><h2>チャット</h2>
+      <p class="sub">${esc(S.names[me])}として書き込みます${pass? "。中身は合言葉で暗号化されます" : ""}</p></div>
+      <button class="btn ghost small" data-act="switchMe">切り替え</button></div>
+    <div class="chatwrap" id="chatwrap">${rows}</div>
+    <form class="chatform" id="chatForm" autocomplete="off">
+      <input class="in" id="chatText" maxlength="500" placeholder="メッセージを入力" aria-label="メッセージ">
+      <button class="btn primary" type="submit">送る</button>
+    </form>
+    ${pass? "" : `<p class="note">いまは暗号化されていないので、書いた内容はGitHub上で誰でも読めます。「毎月の予算」タブで合言葉をかけられます。</p>`}
+  </section></div>`;
+}
+
 function render(){
   $("#nameA").textContent=S.names[0]; $("#nameB").textContent=S.names[1];
   $("#dotA").textContent=(S.names[0]||"A").slice(0,1); $("#dotB").textContent=(S.names[1]||"B").slice(0,1);
@@ -1173,7 +1307,15 @@ function render(){
   const v=$("#view"), nav=document.querySelector("nav.tabs");
   if (nav) nav.style.display = locked? "none" : "";
   if (locked){ v.innerHTML=lockCard(); return; }
-  v.innerHTML = tab==="home"?viewHome(): tab==="initial"?viewInitial(): tab==="budget"?viewBudget(): viewLog();
+  const un=unreadCount();
+  const ct=document.querySelector('[data-tab="chat"]');
+  if (ct) ct.innerHTML = "チャット"+(un&&tab!=="chat"? `<span class="tabdot" aria-label="新しい発言があります"></span>` : "");
+  v.innerHTML = tab==="home"?viewHome(): tab==="initial"?viewInitial(): tab==="budget"?viewBudget():
+                tab==="chat"?viewChat(): viewLog();
+  if (tab==="chat"){
+    const w=$("#chatwrap"); if(w) w.scrollTop=w.scrollHeight;
+    markChatSeen();
+  }
 }
 
 /* ---------- 操作 ---------- */
@@ -1208,6 +1350,12 @@ document.addEventListener("click", async e=>{
     deletedIds.add(id); expenses=expenses.filter(x=>x.id!==id); saveExpensesSoon(); render(); toast("削除しました"); }
   if (act==="ghConnect"){ const el=$("#ghToken"); const v=el?el.value:""; if(el) el.value=""; await ghConnect(v); return; }
   if (act==="ghDisconnect"){ ghDisconnect(); return; }
+  if (act==="setMe"){ me=+t.dataset.i; try{ localStorage.setItem(ME_KEY, String(me)); }catch(err){} markChatSeen(); render(); return; }
+  if (act==="switchMe"){ me=null; try{ localStorage.removeItem(ME_KEY); }catch(err){} render(); return; }
+  if (act==="delMsg"){
+    if (!canWrite()){ nudge(); return; }
+    const id=t.dataset.id;
+    deletedChat.add(id); chat=chat.filter(m=>m.id!==id); saveChatSoon(); render(); return; }
   if (act==="passSet" || act==="passChange"){
     if (!canWrite()){ nudge(); return; }
     const p1=window.prompt(act==="passSet"
@@ -1221,8 +1369,8 @@ document.addEventListener("click", async e=>{
     if (String(p2)!==v1){ alert("2回目が一致しませんでした。もう一度お試しください。"); return; }
     pass=v1; cryptoSalt=null; cryptoKey=null;
     try{ localStorage.setItem(PASS_KEY, pass); }catch(err){}
-    pushed.settings=null; pushed.expenses=null;
-    await pushSettings(); await pushExpenses();
+    pushed.settings=null; pushed.expenses=null; pushed.chat=null;
+    await pushSettings(); await pushExpenses(); if(chat.length) await pushChat();
     render(); toast("合言葉をかけました。相手にも同じ合言葉を伝えてください");
     return; }
   if (act==="passClear"){
@@ -1230,8 +1378,8 @@ document.addEventListener("click", async e=>{
     if (!confirm("暗号化をやめますか？\n\nやめると、家計と家計簿の中身がGitHub上で誰にでも読める状態に戻ります。")) return;
     pass=""; cryptoSalt=null; cryptoKey=null;
     try{ localStorage.removeItem(PASS_KEY); }catch(err){}
-    pushed.settings=null; pushed.expenses=null;
-    await pushSettings(); await pushExpenses();
+    pushed.settings=null; pushed.expenses=null; pushed.chat=null;
+    await pushSettings(); await pushExpenses(); if(chat.length) await pushChat();
     render(); toast("暗号化をやめました");
     return; }
   if (act==="ghInvite"){
@@ -1294,6 +1442,17 @@ document.addEventListener("submit", async e=>{
     pass=v; cryptoKey=null; locked=false;
     try{ localStorage.setItem(PASS_KEY, pass); }catch(err){}
     await pull(); render(); toast("開きました");
+    return;
+  }
+  if (e.target.id==="chatForm"){
+    e.preventDefault();
+    const el=$("#chatText"), text=(el.value||"").trim();
+    if (!text) return;
+    if (!canWrite()){ nudge(); return; }
+    chat=sortChat(chat.concat([{id:uid()+uid(), who:me, text, at:Date.now()}])).slice(-MSG_MAX);
+    el.value=""; saveChatSoon(); markChatSeen(); render();
+    const w=$("#chatwrap"); if(w) w.scrollTop=w.scrollHeight;
+    const n=$("#chatText"); if(n) n.focus();
     return;
   }
   if (e.target.id!=="expForm") return; e.preventDefault();

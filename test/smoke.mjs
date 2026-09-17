@@ -33,13 +33,14 @@ async function run(name, {files, token, repoStatus, hash, clipboard}, body){
     urls.push(m+' '+u);
     if (STRAY_SLASH.test(u)) return route.fulfill({status:400, body:'{"message":"Bad Request"}'});
     if (m==='OPTIONS') return route.fulfill({status:204, headers:CORS});
-    if (m==='PUT'){ const key = u.includes('settings')?'settings':'expenses';
+    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : 'expenses';
+    if (m==='PUT'){ const key = keyOf(u);
       const b = JSON.parse(req.postData()||'{}');
       puts.push({key, data: JSON.parse(Buffer.from(b.content,'base64').toString('utf8'))});
       files[key] = puts[puts.length-1].data;
       return route.fulfill({status:200, headers:{...CORS,'content-type':'application/json'}, body: JSON.stringify({content:{sha:'sha-'+puts.length}})});
     }
-    if (/\/contents\//.test(u)){ const key = u.includes('settings')?'settings':'expenses';
+    if (/\/contents\//.test(u)){ const key = keyOf(u);
       if (files[key]==null) return route.fulfill({status:404, headers:{...CORS,'content-type':'application/json'}, body:'{"message":"Not Found"}'});
       return route.fulfill({status:200, headers:{...CORS,'content-type':'application/json'},
         body: JSON.stringify({sha:'sha-'+key, content: Buffer.from(JSON.stringify(files[key])).toString('base64')})});
@@ -229,6 +230,60 @@ await run('招待リンクに合言葉も入る', {files:{...encFiles}, hash:'#t
   ok(!(await page.textContent('#view')).includes('合言葉を入れてください'), 'そのまま開く');
   ok((await page.textContent('#sync')).includes('2人で同期中（暗号化）'), '暗号化したまま同期する');
   ok(!page.url().includes(encodeURIComponent(PASS)), 'アドレス欄から合言葉が消えている');
+});
+
+// 13〜15) チャット
+await run('チャット', {files:{settings:null, expenses:null, chat:null}, token:'github_pat_owner'}, async (page,{puts,files})=>{
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(200);
+  ok((await page.textContent('#view')).includes('この端末を使うのはどちら'), '最初にどちらか選ばせる');
+  await page.click('[data-act="setMe"][data-i="0"]'); await page.waitForTimeout(200);
+  await page.fill('#chatText', '今日の夜ごはん、いる？');
+  await page.click('#chatForm button[type=submit]'); await page.waitForTimeout(900);
+  ok((await page.textContent('#chatwrap')).includes('今日の夜ごはん、いる？'), '自分の発言が出る');
+  ok(await page.locator('.msg.mine').count()===1, '自分の側に寄って表示される');
+  const c = puts.filter(p=>p.key==='chat').pop();
+  ok(c && c.data.some(m=>m.text==='今日の夜ごはん、いる？' && m.who===0), 'GitHubに書き込まれる');
+  ok((await page.textContent('#chatText')) === '', '送ると入力欄が空になる');
+  // 相手からの発言を受け取る
+  files.chat = [...c.data, {id:'m-partner', who:1, text:'いる！21時ごろ帰る', at:Date.now()}];
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(150);
+  await page.click('[data-act="ghSync"]'); await page.waitForTimeout(700);
+  ok((await page.textContent('[data-tab="chat"]')).length >= 4, 'タブは残っている');
+  ok(await page.locator('[data-tab="chat"] .tabdot').count()===1, '未読の印が出る');
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(300);
+  ok((await page.textContent('#chatwrap')).includes('いる！21時ごろ帰る'), '相手の発言が出る');
+  ok(await page.locator('.msg:not(.mine)').count()===1, '相手の側に表示される');
+  ok(await page.locator('[data-tab="chat"] .tabdot').count()===0, '開くと未読の印が消える');
+  // 自分の発言だけ消せる
+  ok(await page.locator('.msg.mine [data-act="delMsg"]').count()===1, '自分の発言には消すボタンがある');
+  ok(await page.locator('.msg:not(.mine) [data-act="delMsg"]').count()===0, '相手の発言は消せない');
+  await page.click('.msg.mine [data-act="delMsg"]'); await page.waitForTimeout(900);
+  const c2 = puts.filter(p=>p.key==='chat').pop();
+  ok(!c2.data.some(m=>m.text==='今日の夜ごはん、いる？'), '消したことがGitHubにも反映される');
+  ok(c2.data.some(m=>m.id==='m-partner'), '相手の発言は残る');
+});
+
+await run('チャットも暗号化される', {files:{settings:null, expenses:null, chat:null}, token:'github_pat_owner'}, async (page,{puts})=>{
+  const answers = [PASS, PASS];
+  page.on('dialog', d=>d.accept(answers.shift() ?? ''));
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="setMe"][data-i="1"]'); await page.waitForTimeout(150);
+  await page.fill('#chatText', 'ないしょの話');
+  await page.click('#chatForm button[type=submit]'); await page.waitForTimeout(900);
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(150);
+  await page.click('[data-act="passSet"]'); await page.waitForTimeout(2000);
+  const c = puts.filter(p=>p.key==='chat').pop();
+  ok(c && c.data.enc==='aes-gcm', 'チャットも暗号化して保存する');
+  ok(!JSON.stringify(c.data).includes('ないしょ'), '本文が読み取れない');
+});
+
+await run('見るだけの端末はチャットを送れない', {files:seeded}, async (page,{puts})=>{
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="setMe"][data-i="0"]'); await page.waitForTimeout(150);
+  await page.fill('#chatText', '送れないはず');
+  await page.click('#chatForm button[type=submit]'); await page.waitForTimeout(400);
+  ok(puts.length===0, '書き込みを試みない');
+  ok((await page.textContent('#toast')).includes('見るだけ'), '保存できないことを知らせる');
 });
 
 await browser.close(); srv.close();
