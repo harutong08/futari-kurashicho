@@ -109,6 +109,12 @@
    "g": "other",
    "label": "予備費（医療・冠婚葬祭）",
    "amt": 10000
+  },
+  {
+   "id": "w5i0ypg",
+   "g": "other",
+   "label": "新しい項目",
+   "amt": 0
   }
  ],
  "initial": [
