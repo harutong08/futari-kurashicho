@@ -22,7 +22,7 @@ const ok = (c,m)=>{ console.log((c?'  ok  ':'  NG  ')+m); if(!c) fail++; };
 
 const browser = await chromium.launch(SYS ? {executablePath:SYS} : {});
 
-async function run(name, {files, token}, body){
+async function run(name, {files, token, repoStatus}, body){
   const ctx = await browser.newContext();
   const puts = [];
   await ctx.route('https://api.github.com/**', route=>{
@@ -39,6 +39,7 @@ async function run(name, {files, token}, body){
       return route.fulfill({status:200, headers:{...CORS,'content-type':'application/json'},
         body: JSON.stringify({sha:'sha-'+key, content: Buffer.from(JSON.stringify(files[key])).toString('base64')})});
     }
+    if (repoStatus && repoStatus!==200) return route.fulfill({status:repoStatus, headers:{...CORS,'content-type':'application/json'}, body:'{"message":"Not Found"}'});
     return route.fulfill({status:200, headers:{...CORS,'content-type':'application/json'}, body: JSON.stringify({permissions:{push:true}})});
   });
   const page = await ctx.newPage();
@@ -127,6 +128,22 @@ await run('細工したバックアップ', {files:{settings:null, expenses:null
   ok(await page.evaluate(()=>window.__pwned===undefined), '仕込んだスクリプトが動かない');
   ok((await page.locator('#movein').getAttribute('data-x'))===null, '属性が増えていない');
   ok((await page.textContent('#nameA')).includes('<img'), '名前は文字として表示される');
+});
+
+// 5) つなげなかったとき、理由が画面に残る
+await run('つなげないとき', {files:{settings:null, expenses:null}, repoStatus:404}, async (page,{puts})=>{
+  let dialog = '';
+  page.on('dialog', d=>{ dialog = d.message(); d.accept(); });
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(150);
+  await page.fill('#ghToken', 'github_pat_dummy');
+  await page.click('[data-act="ghConnect"]'); await page.waitForTimeout(600);
+  ok(dialog.includes('つなげませんでした'), 'ダイアログで知らせる');
+  ok(dialog.includes('Repository access'), '原因の当たりを示す（対象リポジトリが選ばれていない）');
+  ok(dialog.includes('404'), 'HTTPの番号を添える');
+  const card = await page.textContent('#view');
+  ok(card.includes('つなげませんでした') && card.includes('Repository access'), '画面にも理由が残る');
+  ok(puts.length===0, '書き込みは試みない');
+  ok((await page.textContent('#sync')).includes('この端末だけ'), '状態は変わらない');
 });
 
 await browser.close(); srv.close();

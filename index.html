@@ -415,6 +415,7 @@ let pushed = { settings:null, expenses:null };
 let syncedIds = new Set();   /* GitHub側にあると分かっている支出のid */
 let deletedIds = new Set();  /* この端末で消した支出のid（復活を防ぐ） */
 let lastNudge = 0;
+let connectErr = "";   /* つなげなかった理由。カードに出したままにする */
 
 function b64enc(str){
   const b=new TextEncoder().encode(str); let s=""; const CH=0x8000;
@@ -431,19 +432,26 @@ function ghHeaders(extra){
   if (token) h.Authorization="Bearer "+token;
   return h;
 }
-async function ghErr(r){
+async function ghFetch(url, init){
+  try{ return await fetch(url, init); }
+  catch(e){ throw new Error("GitHubに届きませんでした（オフライン、通信の遮断、ブラウザの拡張機能などの可能性）"); }
+}
+async function ghErr(r, where){
   let m=""; try{ const j=await r.json(); m=j.message||""; }catch(e){}
-  if (r.status===401) return "トークンが違うか、期限切れです";
-  if (r.status===403 && /rate limit/i.test(m)) return "GitHubの回数制限です。少し待つと戻ります";
-  if (r.status===403 || r.status===404) return "このリポジトリに書き込む権限がありません";
-  if (r.status===409 || r.status===422) return "他の端末の保存とぶつかりました";
-  return "GitHubのエラー（"+r.status+"）"+(m? "："+m : "");
+  const tail = "（"+r.status+(m? "："+m : "")+"）";
+  if (r.status===401) return "トークンが違うか、期限切れです。貼り付けたときに前後の空白が入っていないかも確かめてください"+tail;
+  if (r.status===403 && /rate limit/i.test(m)) return "GitHubの回数制限です。少し待つと戻ります"+tail;
+  if (r.status===404 && where==="repo") return "トークンの Repository access に "+GH.owner+"/"+GH.repo+" が選ばれていないようです。トークンを作り直すか、対象のリポジトリを選び直してください"+tail;
+  if (r.status===403 && where==="repo") return "トークンでこのリポジトリを読めません。Repository access と Permissions の Contents を確かめてください"+tail;
+  if (r.status===403 || r.status===404) return "このリポジトリに書き込む権限がありません。トークンの Permissions → Contents が Read and write になっているか確かめてください"+tail;
+  if (r.status===409 || r.status===422) return "他の端末の保存とぶつかりました"+tail;
+  return "GitHubのエラー"+tail;
 }
 async function ghGet(key){
   const url=API+"contents/"+GH.paths[key]+"?ref="+encodeURIComponent(GH.branch)+"&t="+Date.now();
-  const r=await fetch(url,{headers:ghHeaders(), cache:"no-store"});
+  const r=await ghFetch(url,{headers:ghHeaders(), cache:"no-store"});
   if (r.status===404) return {missing:true, sha:null, data:null};
-  if (!r.ok) throw new Error(await ghErr(r));
+  if (!r.ok) throw new Error(await ghErr(r, "file"));
   const j=await r.json();
   let data=null; try{ data=JSON.parse(b64dec(j.content)); }catch(e){ data=null; }
   return {missing:false, sha:j.sha, data};
@@ -451,9 +459,9 @@ async function ghGet(key){
 async function ghPut(key, data, curSha, message){
   const body={message, content:b64enc(JSON.stringify(data,null,1)), branch:GH.branch};
   if (curSha) body.sha=curSha;
-  const r=await fetch(API+"contents/"+GH.paths[key], {method:"PUT", headers:ghHeaders({"Content-Type":"application/json"}), body:JSON.stringify(body)});
+  const r=await ghFetch(API+"contents/"+GH.paths[key], {method:"PUT", headers:ghHeaders({"Content-Type":"application/json"}), body:JSON.stringify(body)});
   if (r.status===409 || r.status===422) return {conflict:true};
-  if (!r.ok) throw new Error(await ghErr(r));
+  if (!r.ok) throw new Error(await ghErr(r, "write"));
   const j=await r.json();
   return {sha:j.content && j.content.sha};
 }
@@ -590,8 +598,8 @@ async function ghConnect(tk){
   const prev=token; token=tk;
   busy++; setSync();
   try{
-    const r=await fetch(API, {headers:ghHeaders(), cache:"no-store"});
-    if (!r.ok) throw new Error(await ghErr(r));
+    const r=await ghFetch(API, {headers:ghHeaders(), cache:"no-store"});
+    if (!r.ok) throw new Error(await ghErr(r, "repo"));
     const info=await r.json();
     if (info.permissions && info.permissions.push===false) throw new Error("このトークンには書き込みの権限がありません");
     const gs=await ghGet("settings");
@@ -603,7 +611,7 @@ async function ghConnect(tk){
     const ge=await ghGet("expenses");
     if (!ge.missing){ sha.expenses=ge.sha; adoptExpenses(ge.data); } else { sha.expenses=null; syncedIds=new Set(); }
     try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
-    mode="github"; localDirty=false; lastErr="";
+    mode="github"; localDirty=false; lastErr=""; connectErr="";
     busy--; setSync();
     await pushSettings();
     if (expenses.length) await pushExpenses();
@@ -611,6 +619,7 @@ async function ghConnect(tk){
     return;
   }catch(e){
     token=prev; lastErr=""; busy--; setSync();
+    connectErr=e.message; render();
     alert("つなげませんでした。\n\n"+e.message);
   }
 }
@@ -657,6 +666,7 @@ function syncCard(){
         <input class="in" type="password" id="ghToken" placeholder="github_pat_… を貼り付け" autocomplete="off" spellcheck="false" aria-label="GitHubのトークン" style="flex:1">
         <button class="btn primary small" data-act="ghConnect">つなぐ</button>
       </div>
+      ${connectErr? `<div class="callout warn" style="font-size:13px"><b>つなげませんでした。</b><br>${esc(connectErr)}</div>` : ""}
       <details><summary style="cursor:pointer;font-size:13px;color:var(--muted)">トークンの作り方</summary>
         <ol style="font-size:13px;color:var(--muted);padding-left:1.2em;margin:8px 0 0">
           <li>GitHubで <b>Settings → Developer settings → Personal access tokens → Fine-grained tokens</b> を開く</li>
