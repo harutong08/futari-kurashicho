@@ -1,4 +1,4 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src https://api.github.com; script-src 'unsafe-inline'; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src data:; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self' https://api.github.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>ふたりの信州暮らし帳</title>
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <meta name="description" content="松本・塩尻・安曇野での同棲にかかるお金の試算と、2人で使う家計簿">
@@ -832,6 +832,151 @@ async function boot(){
 document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) pull(); });
 window.addEventListener("focus", ()=>{ pull(); });
 
+/* ===== レシートの読み取り =====
+   同梱した Tesseract（vendor/）をブラウザの中だけで動かす。画像はどこにも送らないし保存もしない。
+   読み取った値はそのまま登録せず、記録欄に入れて確認してもらう。 */
+let ocrWorker=null, ocrBusy=false;
+function ocrSay(msg){ const el=$("#ocrStat"); if(el) el.innerHTML=msg; }
+
+async function loadScript(src){
+  if (window.Tesseract) return;
+  await new Promise((res,rej)=>{
+    const sc=document.createElement("script");
+    sc.src=src; sc.onload=res;
+    sc.onerror=()=>rej(new Error("読み取りの部品を読み込めませんでした"));
+    document.head.appendChild(sc);
+  });
+}
+async function getOcr(){
+  if (ocrWorker) return ocrWorker;
+  await loadScript("vendor/tesseract.min.js");
+  ocrWorker=await Tesseract.createWorker("jpn", 1, {
+    workerPath:"vendor/worker.min.js",
+    corePath:"vendor/",
+    langPath:"vendor/",
+    gzip:false,
+    logger:m=>{
+      const pct=Math.round((m.progress||0)*100);
+      if (m.status==="loading language traineddata" || m.status==="loading tesseract core")
+        ocrSay("読み取りの準備中… "+pct+"%（初回だけ約5MB取得します）");
+      else if (m.status==="recognizing text") ocrSay("読み取り中… "+pct+"%");
+    }
+  });
+  return ocrWorker;
+}
+/* 撮った写真はそのままだと大きすぎたり薄かったりするので、
+   長辺1600pxに整えて白黒にし、明暗を伸ばしてから渡す */
+async function prepImage(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("画像を読み込めませんでした")); i.src=url; });
+    const long=Math.max(img.width,img.height)||1, k=Math.min(2, 1600/long);
+    const w=Math.max(1,Math.round(img.width*k)), h=Math.max(1,Math.round(img.height*k));
+    const cv=document.createElement("canvas"); cv.width=w; cv.height=h;
+    const cx=cv.getContext("2d", {willReadFrequently:true});
+    cx.drawImage(img,0,0,w,h);
+    const d=cx.getImageData(0,0,w,h), a=d.data;
+    const hist=new Uint32Array(256);
+    for(let i=0;i<a.length;i+=4){ const g=(a[i]*299+a[i+1]*587+a[i+2]*114)/1000|0; a[i]=a[i+1]=a[i+2]=g; hist[g]++; }
+    const total=w*h; let lo=0, hi=255, acc=0;
+    for(let v=0;v<256;v++){ acc+=hist[v]; if(acc>total*0.02){ lo=v; break; } }
+    acc=0; for(let v=255;v>=0;v--){ acc+=hist[v]; if(acc>total*0.02){ hi=v; break; } }
+    const span=Math.max(1,hi-lo);
+    for(let i=0;i<a.length;i+=4){ const g=Math.max(0,Math.min(255,Math.round((a[i]-lo)*255/span))); a[i]=a[i+1]=a[i+2]=g; }
+    cx.putImageData(d,0,0);
+    return cv;
+  } finally { URL.revokeObjectURL(url); }
+}
+
+const RCPT_CAT=[
+  ["food", /(スーパー|マート|ストア|ツルヤ|デリシア|綿半|イオン|西友|ベイシア|業務スーパー|食品|青果|精肉|鮮魚|ベーカリー|パン)/],
+  ["life", /(ドラッグ|薬局|ウエルシア|ツルハ|サンドラッグ|マツモトキヨシ|ホームセンター|カインズ|コメリ|ニトリ|無印|ダイソー|セリア|クリーニング)/],
+  ["car",  /(ENEOS|エネオス|出光|コスモ石油|apollostation|ガソリン|給油|オートバックス|車検|高速|ETC)/i],
+  ["fun",  /(レストラン|カフェ|コーヒー|居酒屋|ラーメン|焼肉|寿司|スターバックス|ドトール|マクドナルド|すき家|吉野家|ガスト|サイゼリヤ|映画|水族館|美術館)/],
+  ["util", /(電気料金|ガス料金|水道|灯油|中部電力|東京電力)/],
+  ["comm", /(ドコモ|ソフトバンク|楽天モバイル|通信料|光回線|ワイモバイル)/i]
+];
+/* OCRは「2,178」を「2, 178」のように空白付きで返すことがある。
+   全角を半角に直し、桁区切りで分かれた数字をつなぎ直してから読む。 */
+function normText(t){
+  return String(t||"")
+    .replace(/[０-９]/g, c=>String.fromCharCode(c.charCodeAt(0)-0xFEE0))
+    .replace(/[，、]/g, ",")
+    .replace(/[．]/g, ".")
+    .replace(/[￥]/g, "¥")
+    .replace(/(\d)\s*[,.'`\u00b7\u30fb]\s*(?=\d{3}(?!\d))/g, "$1");
+}
+function pickNums(line){
+  const t=String(line).replace(/(\d)\s+(?=\d{3}(?!\d))/g, "$1");
+  return [...t.matchAll(/([0-9]+)/g)]
+    .map(m=>+m[1])
+    .filter(n=>n>0 && n<2000000);
+}
+function parseReceipt(raw){
+  const text=normText(raw);
+  const lines=text.split(/\r?\n/).map(l=>l.replace(/[ \t\u3000]+/g," ").trim()).filter(Boolean);
+  const TOTAL=/(合\s*計|お会計|ご請求|請求額|総額|お買上)/;
+  /* 「税込合計」は拾いたいので、税そのものの行だけを外す */
+  const SKIP=/(小\s*計|お預|預り|お釣|釣銭|おつり|現金|クレジット|ポイント|値引|割引|消費税|内税|外税|税額|点数|個数)/;
+  let amount=0;
+  for (let i=0;i<lines.length;i++){
+    const l=lines[i];
+    if (!TOTAL.test(l) || SKIP.test(l)) continue;
+    let ns=pickNums(l);
+    if (!ns.length && lines[i+1]) ns=pickNums(lines[i+1]);
+    if (ns.length) amount=Math.max(...ns);
+  }
+  if (!amount){
+    const cand=[];
+    lines.forEach(l=>{ if(/[¥￥]|円/.test(l) && !SKIP.test(l)) cand.push(...pickNums(l)); });
+    if (cand.length) amount=Math.max(...cand);
+  }
+  let date="";
+  const t=text.replace(/[\s\u3000]+/g,"");
+  let m=t.match(/(20\d{2})[年/\-.](\d{1,2})[月/\-.](\d{1,2})/);
+  if (!m){ const r=t.match(/令和(\d{1,2})年(\d{1,2})月(\d{1,2})/); if(r) m=[null, String(2018+ +r[1]), r[2], r[3]]; }
+  if (!m){ const r=t.match(/[RＲ](\d{1,2})[./](\d{1,2})[./](\d{1,2})/); if(r) m=[null, String(2018+ +r[1]), r[2], r[3]]; }
+  if (m){
+    const y=+m[1], mo=+m[2], da=+m[3];
+    if (mo>=1&&mo<=12&&da>=1&&da<=31){
+      const d=new Date(y,mo-1,da), now=Date.now();
+      if (d.getTime()<now+86400000*2 && d.getTime()>now-86400000*730)
+        date=y+"-"+String(mo).padStart(2,"0")+"-"+String(da).padStart(2,"0");
+    }
+  }
+  let store="";
+  for (const l of lines.slice(0,6)){
+    if (/[ぁ-んァ-ヶ一-龠A-Za-z]/.test(l) && !/^[0-9\-/:]+$/.test(l) && l.length>=2 && l.length<=24){ store=l; break; }
+  }
+  let cat="";
+  for (const [k,re] of RCPT_CAT){ if (re.test(text)){ cat=k; break; } }
+  return {amount, date, store, cat, lines};
+}
+
+async function readReceipt(file){
+  if (ocrBusy) return;
+  ocrBusy=true;
+  try{
+    ocrSay("画像を整えています…");
+    const cv=await prepImage(file);
+    const w=await getOcr();
+    const {data}=await w.recognize(cv);
+    const r=parseReceipt(data.text||"");
+    const amt=$("#e-amount"), dt=$("#e-date"), ct=$("#e-cat"), mm=$("#e-memo");
+    const got=[];
+    if (r.amount && amt){ amt.value=r.amount; got.push("金額 "+yen(r.amount)); }
+    if (r.date && dt){ dt.value=r.date; got.push("日付 "+Number(r.date.slice(5,7))+"/"+Number(r.date.slice(8,10))); }
+    if (r.cat && ct){ ct.value=r.cat; got.push("分類 "+glabel(r.cat)); }
+    if (r.store && mm && !mm.value){ mm.value=r.store; got.push("メモ "+r.store); }
+    if (!got.length) ocrSay('<b style="color:var(--bad)">読み取れませんでした。</b>明るい場所で、レシート全体がまっすぐ入るように撮ると読めることがあります。手で入力してください。');
+    else ocrSay("読めました：<b>"+esc(got.join("・"))+"</b><br>合っているか確かめてから「記録する」を押してください。");
+    if (amt && r.amount) amt.focus();
+  }catch(e){
+    ocrSay('<b style="color:var(--bad)">'+esc(e.message||"読み取りに失敗しました")+'</b>');
+  }
+  ocrBusy=false;
+}
+
 /* ---------- 描画ヘルパー ---------- */
 function lockCard(){
   return `<div class="grid"><section class="card s12" style="max-width:520px;margin:32px auto">
@@ -1217,7 +1362,12 @@ function viewLog(){
   const PAYER=[["a",0],["b",1],["j","joint"]];
   return `<div class="grid">
   <section class="card s5"><form id="expForm" class="stack" autocomplete="off">
-    <div><h2>支出を記録</h2><p class="sub">レシートを見ながらサッと入力</p></div>
+    <div><h2>支出を記録</h2><p class="sub">レシートの写真からでも、手入力でも</p></div>
+    <div class="card flat" style="padding:12px;box-shadow:none">
+      <label class="btn primary small" style="display:inline-block" for="rcpt">レシートを撮る・選ぶ</label>
+      <input type="file" accept="image/*" capture="environment" id="rcpt" style="position:absolute;width:1px;height:1px;opacity:0;pointer-events:none" aria-label="レシートの画像">
+      <div class="note" id="ocrStat" style="margin-top:8px">写真はこの端末の中だけで読み取ります。どこにも送らず、保存もしません。</div>
+    </div>
     <label class="fld">金額<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="1" id="e-amount" required placeholder="0" style="font-size:22px;padding-block:10px"></span></label>
     <div class="fields">
       <label class="fld">日付<input class="in" type="date" id="e-date" value="${esc(month===todayStr().slice(0,7)?todayStr():month+"-01")}" required></label>
@@ -1407,6 +1557,7 @@ document.addEventListener("input", e=>{
 });
 document.addEventListener("change", e=>{
   const el=e.target;
+  if (el.id==="rcpt"){ const f=el.files && el.files[0]; el.value=""; if(f) readReceipt(f); return; }
   if (el.id==="logMonth"){ if(el.value){ month=el.value; render(); } return; }
   if (el.dataset && el.dataset.ov){
     const ym=el.dataset.ov, k=+el.dataset.p, val=Math.max(0,Math.round(+el.value||0));

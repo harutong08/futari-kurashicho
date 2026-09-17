@@ -9,10 +9,27 @@ import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
-const HTML = readFileSync(join(HERE, '..', 'index.html'));
+const ROOT = join(HERE, '..');
+const HTML = readFileSync(join(ROOT, 'index.html'));
+const TYPES = {'.js':'text/javascript', '.json':'application/json', '.wasm':'application/wasm',
+               '.png':'image/png', '.txt':'text/plain'};
 /* この環境にはPlaywright同梱のブラウザがないことがあるので、あればシステムのChromiumを使う */
 const SYS = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => existsSync(p));
-const srv = createServer((q,r)=>{ r.writeHead(200,{'content-type':'text/html; charset=utf-8'}); r.end(HTML); });
+/* index.html のほか、同梱した読み取り部品（vendor/）も本番と同じように配る */
+const srv = createServer((q,r)=>{
+  const path = decodeURIComponent((q.url||'/').split('?')[0]);
+  if (path==='/' || path==='/index.html'){
+    r.writeHead(200,{'content-type':'text/html; charset=utf-8'}); r.end(HTML); return;
+  }
+  const rel = path.replace(/^\/+/,'');
+  if (rel.includes('..')){ r.writeHead(400); r.end(); return; }
+  try{
+    const buf = readFileSync(join(ROOT, rel));
+    const ext = (rel.match(/\.[a-z0-9]+$/i)||[''])[0].toLowerCase();
+    r.writeHead(200,{'content-type': TYPES[ext] || 'application/octet-stream'});
+    r.end(buf);
+  }catch(e){ r.writeHead(404); r.end(); }
+});
 await new Promise(res=>srv.listen(0,res));
 const url = 'http://127.0.0.1:'+srv.address().port+'/';
 
@@ -284,6 +301,41 @@ await run('見るだけの端末はチャットを送れない', {files:seeded},
   await page.click('#chatForm button[type=submit]'); await page.waitForTimeout(400);
   ok(puts.length===0, '書き込みを試みない');
   ok((await page.textContent('#toast')).includes('見るだけ'), '保存できないことを知らせる');
+});
+
+// 16) レシートの読み取り（同梱したOCRを実際に動かす）
+await run('レシート読み取り', {files:{settings:null, expenses:null}}, async (page)=>{
+  await page.click('[data-tab="log"]'); await page.waitForTimeout(200);
+  ok(await page.locator('label[for="rcpt"]').isVisible(), '読み取りのボタンがある');
+  // レシートに見立てた画像をその場で作って、ファイル選択と同じように渡す
+  await page.evaluate(async ()=>{
+    const cv=document.createElement('canvas'); cv.width=560; cv.height=440;
+    const cx=cv.getContext('2d');
+    cx.fillStyle='#fff'; cx.fillRect(0,0,cv.width,cv.height);
+    cx.fillStyle='#000'; cx.font='30px IPAGothic, sans-serif';
+    cx.fillText('スーパーツルヤ 松本店', 24, 56);
+    cx.fillText('2026年9月17日', 24, 112);
+    cx.fillText('小計      1,980', 24, 224);
+    cx.fillText('合計      2,178', 24, 280);
+    cx.fillText('お預り    3,000', 24, 336);
+    const blob=await new Promise(r=>cv.toBlob(r,'image/png'));
+    const dt=new DataTransfer(); dt.items.add(new File([blob],'receipt.png',{type:'image/png'}));
+    const inp=document.getElementById('rcpt');
+    inp.files=dt.files;
+    inp.dispatchEvent(new Event('change',{bubbles:true}));
+  });
+  await page.waitForFunction(()=>{
+    const el=document.getElementById('ocrStat');
+    return el && (/読めました|読み取れませんでした|失敗/.test(el.textContent));
+  }, null, {timeout:180000});
+  const stat = await page.textContent('#ocrStat');
+  ok(/読めました/.test(stat), '読み取りが最後まで走る（'+stat.slice(0,40)+'）');
+  ok((await page.inputValue('#e-amount'))==='2178', '合計の金額を拾う（小計やお預りではない）');
+  ok((await page.inputValue('#e-date'))==='2026-09-17', '日付を拾う');
+  ok((await page.inputValue('#e-cat'))==='food', '店名から分類を当てる');
+  ok((await page.inputValue('#e-memo')).length>0, 'メモに店名が入る');
+  // 読み取っただけでは記録しない
+  ok((await page.textContent('#view')).includes('確かめてから'), '確認を促す');
 });
 
 await browser.close(); srv.close();
