@@ -1,0 +1,291 @@
+{
+ "v": 1,
+ "names": [
+  "あなた",
+  "パートナー"
+ ],
+ "incomes": [
+  200000,
+  150000
+ ],
+ "incomeType": "net",
+ "area": "matsumoto",
+ "split": "ratio",
+ "fixed": [
+  130000,
+  100000
+ ],
+ "budget": [
+  {
+   "id": "rent",
+   "g": "home",
+   "label": "家賃",
+   "amt": 70000
+  },
+  {
+   "id": "kanri",
+   "g": "home",
+   "label": "共益費・管理費",
+   "amt": 3000
+  },
+  {
+   "id": "park",
+   "g": "home",
+   "label": "駐車場（1台）",
+   "amt": 5000
+  },
+  {
+   "id": "elec",
+   "g": "util",
+   "label": "電気",
+   "amt": 11000,
+   "season": "elec"
+  },
+  {
+   "id": "gas",
+   "g": "util",
+   "label": "ガス（中心部は都市ガス物件も）",
+   "amt": 5500,
+   "season": "gas"
+  },
+  {
+   "id": "water",
+   "g": "util",
+   "label": "上下水道",
+   "amt": 4500,
+   "season": "water"
+  },
+  {
+   "id": "kero",
+   "g": "util",
+   "label": "灯油（年間を月割り）",
+   "amt": 3000,
+   "season": "kero"
+  },
+  {
+   "id": "net",
+   "g": "comm",
+   "label": "光回線",
+   "amt": 5000
+  },
+  {
+   "id": "phone",
+   "g": "comm",
+   "label": "スマホ2台（格安SIM）",
+   "amt": 6000
+  },
+  {
+   "id": "food",
+   "g": "food",
+   "label": "食費（自炊中心）",
+   "amt": 50000
+  },
+  {
+   "id": "eatout",
+   "g": "fun",
+   "label": "外食・デート",
+   "amt": 15000
+  },
+  {
+   "id": "daily",
+   "g": "life",
+   "label": "日用品",
+   "amt": 8000
+  },
+  {
+   "id": "subs",
+   "g": "life",
+   "label": "サブスク",
+   "amt": 2000
+  },
+  {
+   "id": "car",
+   "g": "car",
+   "label": "ガソリン・保険・税金の月割り",
+   "amt": 20000
+  },
+  {
+   "id": "spare",
+   "g": "other",
+   "label": "予備費（医療・冠婚葬祭）",
+   "amt": 10000
+  }
+ ],
+ "initial": [
+  {
+   "id": "shiki",
+   "g": "contract",
+   "label": "敷金（保証金）",
+   "m": 1,
+   "amt": 70000,
+   "off": false
+  },
+  {
+   "id": "rei",
+   "g": "contract",
+   "label": "礼金",
+   "m": 1,
+   "amt": 70000,
+   "off": false
+  },
+  {
+   "id": "chukai",
+   "g": "contract",
+   "label": "仲介手数料",
+   "m": 1.1,
+   "amt": 77000,
+   "off": false
+  },
+  {
+   "id": "maeyachin",
+   "g": "contract",
+   "label": "前家賃（翌月分＋日割り）",
+   "m": 1.5,
+   "amt": 105000,
+   "off": false
+  },
+  {
+   "id": "hosho",
+   "g": "contract",
+   "label": "保証会社の初回保証料",
+   "m": 0.5,
+   "amt": 35000,
+   "off": false
+  },
+  {
+   "id": "kasai",
+   "g": "contract",
+   "label": "火災保険（2年）",
+   "amt": 20000,
+   "off": false
+  },
+  {
+   "id": "kagi",
+   "g": "contract",
+   "label": "鍵交換",
+   "amt": 16500,
+   "off": false
+  },
+  {
+   "id": "hikkoshi",
+   "g": "move",
+   "label": "引越し業者（県内・2人分）",
+   "amt": 60000,
+   "off": false
+  },
+  {
+   "id": "tetsuzuki",
+   "g": "move",
+   "label": "住民票・郵便・手続きの雑費",
+   "amt": 5000,
+   "off": false
+  },
+  {
+   "id": "fridge",
+   "g": "furniture",
+   "label": "冷蔵庫（2人用 300L前後）",
+   "amt": 60000,
+   "off": false
+  },
+  {
+   "id": "wash",
+   "g": "furniture",
+   "label": "洗濯機",
+   "amt": 50000,
+   "off": false
+  },
+  {
+   "id": "bed",
+   "g": "furniture",
+   "label": "ベッド・寝具",
+   "amt": 60000,
+   "off": false
+  },
+  {
+   "id": "kitchen",
+   "g": "furniture",
+   "label": "電子レンジ・炊飯器",
+   "amt": 30000,
+   "off": false
+  },
+  {
+   "id": "curtain",
+   "g": "furniture",
+   "label": "カーテン・照明",
+   "amt": 30000,
+   "off": false
+  },
+  {
+   "id": "sofa",
+   "g": "furniture",
+   "label": "ソファ・ダイニングテーブル",
+   "amt": 30000,
+   "off": false
+  },
+  {
+   "id": "dishes",
+   "g": "furniture",
+   "label": "調理器具・食器・日用品",
+   "amt": 20000,
+   "off": false
+  },
+  {
+   "id": "heater",
+   "g": "winter",
+   "label": "石油ファンヒーター",
+   "amt": 20000,
+   "off": false
+  },
+  {
+   "id": "kotatsu",
+   "g": "winter",
+   "label": "こたつ・電気毛布",
+   "amt": 12000,
+   "off": false
+  },
+  {
+   "id": "danetsu",
+   "g": "winter",
+   "label": "窓の断熱シート・すきま対策",
+   "amt": 5000,
+   "off": false
+  },
+  {
+   "id": "yobi",
+   "g": "spare",
+   "label": "予備費（想定外の出費）",
+   "amt": 50000,
+   "off": false
+  }
+ ],
+ "savings": {
+  "current": 0,
+  "monthly": [
+   60000,
+   40000
+  ],
+  "cushion": true,
+  "moveIn": "2027-06",
+  "bonuses": [
+   {
+    "id": "summer",
+    "label": "夏のボーナス",
+    "m": 6,
+    "amt": [
+     0,
+     0
+    ]
+   },
+   {
+    "id": "winter",
+    "label": "冬のボーナス",
+    "m": 12,
+    "amt": [
+     0,
+     0
+    ]
+   }
+  ],
+  "overrides": {}
+ }
+}
