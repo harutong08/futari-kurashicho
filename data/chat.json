@@ -1,20 +1,9 @@
-[
- {
-  "id": "cotavw0e1t4foq",
-  "who": 1,
-  "text": "こんにちは",
-  "at": 1789871299836
- },
- {
-  "id": "tn9ijucf0n2x6g",
-  "who": 0,
-  "text": "こんにちやや",
-  "at": 1789871362203
- },
- {
-  "id": "9hg82ek17p9xb7",
-  "who": 1,
-  "text": "ちゃんと給与明細みようね",
-  "at": 1789871387379
- }
-]
+{
+ "v": 1,
+ "enc": "aes-gcm",
+ "kdf": "pbkdf2-sha256",
+ "iter": 200000,
+ "salt": "mKyLMy61CzU6e3Zuv2GnBQ==",
+ "iv": "jSs0OMcZUkfLFosI",
+ "data": "cced2OdMlEcsGSN80MOmtqujxIjgNi1k0u/7TwKKpfoBN8fhQ0hMe5RjL27fn7LqBoJ2JlnIPTJLuhW8OlTAnpU8YSpQ0U5uyNanhVly9LX/loNdi2wZFYRzB4T3hqCsd/E0MRgB2fTEHzGxh/ramUnX4bjB1Hn5r6/4ghZHPiojaxK/lbK3Hy6WyIRojS8KD7RCNET1qciSprl/9NYMNF08wqL1UEz3cKqXBhbF/8ySRz3nUyZ9romKlEZjWmXpZ6/1osXN4G3lUpE6UhUzdoeQRcILWkWUslB9ANXPmFx8uoqWQ1q2KM8yavGkizGDdp3BkcTJ43gvdU/yi3Jl3U9LvPMAPsNtFUhukTU="
+}
