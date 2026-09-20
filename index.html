@@ -450,7 +450,9 @@ let connectErr = "";   /* つなげなかった理由。カードに出したま
 let pass = "";         /* 合言葉。この端末にだけ置く */
 let cryptoSalt = null; /* 鍵づくりに使う塩。合言葉ごとに1つで、保存ファイルに載る */
 let cryptoKey = null;  /* 導き出した鍵の控え（毎回作ると遅いため） */
-let locked = false;    /* GitHub側が暗号化されていて、開けていない状態 */
+let locked = false;    /* 設定ファイルが開けない＝全体が閉じている状態 */
+let encTrouble = new Set();  /* 別の合言葉で保存されていて読めないファイル */
+const FILE_LABEL = { settings:"設定", expenses:"家計簿", chat:"チャット" };
 
 function b64enc(str){
   const b=new TextEncoder().encode(str); let s=""; const CH=0x8000;
@@ -533,17 +535,21 @@ async function seal(value){
   return {v:1, enc:"aes-gcm", kdf:"pbkdf2-sha256", iter:KDF_ITER,
           salt:bytesB64(cryptoSalt), iv:bytesB64(iv), data:bytesB64(new Uint8Array(ct))};
 }
-/* 開けたら中身を返す。合言葉が無い・違うときは undefined を返して locked を立てる */
-async function open(d){
-  if (!isEnc(d)) return d;
-  if (!pass){ locked=true; return undefined; }
+/* 開けたら中身を返す。開けないときは undefined。
+   設定ファイルが開けないときだけ全体を閉じる（locked）。家計簿やチャットが1つ開けないだけで
+   全部閉じてしまうと、正しい合言葉で開いた直後に閉じ直す動きになってしまうため。 */
+async function open(d, which){
+  if (!isEnc(d)){ if(which) encTrouble.delete(which); return d; }
+  const fail=()=>{ if(which==="settings"||!which) locked=true; if(which) encTrouble.add(which); return undefined; };
+  if (!pass) return fail();
   try{
     const salt=b64bytes(d.salt);
     const key=await keyFor(salt);
     const pt=await crypto.subtle.decrypt({name:"AES-GCM", iv:b64bytes(d.iv)}, key, b64bytes(d.data));
-    cryptoSalt=salt;
+    if (which==="settings" || !cryptoSalt) cryptoSalt=salt;
+    if (which) encTrouble.delete(which);
     return JSON.parse(new TextDecoder().decode(pt));
-  }catch(e){ locked=true; return undefined; }
+  }catch(e){ return fail(); }
 }
 async function canOpen(d, p){
   if (!isEnc(d)) return true;
@@ -621,7 +627,7 @@ function saveExpensesSoon(){
 }
 
 async function pushSettings(){
-  if (mode!=="github") return;
+  if (mode!=="github" || locked) return;
   const data=clone(S), json=JSON.stringify(data);
   if (json===pushed.settings) return;
   busy++; setSync();
@@ -663,8 +669,8 @@ async function pushChat(){
   try{
     for (let i=0;i<3;i++){
       const g=await ghGet("chat");
-      const opened=g.missing? [] : await open(g.data);
-      if (opened===undefined){ lastErr="合言葉が合いません"; break; }
+      const opened=g.missing? [] : await open(g.data, "chat");
+      if (opened===undefined){ lastErr="チャットが別の合言葉で保存されています"; break; }
       const merged=mergeChat(Array.isArray(opened)?opened:[], chat);
       const json=JSON.stringify(merged);
       if (!g.missing && json===pushed.chat){ sha.chat=g.sha; break; }
@@ -699,13 +705,13 @@ function markChatSeen(){
 }
 
 async function pushExpenses(){
-  if (mode!=="github") return;
+  if (mode!=="github" || locked) return;
   busy++; setSync();
   try{
     for (let i=0;i<3;i++){
       const g=await ghGet("expenses");
-      const opened=g.missing? [] : await open(g.data);
-      if (opened===undefined){ lastErr="合言葉が合いません"; break; }
+      const opened=g.missing? [] : await open(g.data, "expenses");
+      if (opened===undefined){ lastErr="家計簿が別の合言葉で保存されています"; break; }
       const remote=Array.isArray(opened)? opened : [];
       const merged=mergeExp(remote, expenses);
       const json=JSON.stringify(merged);
@@ -742,6 +748,31 @@ function adoptExpenses(remote){
   return changed;
 }
 
+/* 読めなくなったファイルを、この端末が持っている内容で書き直す。
+   合言葉を変えるときにも使う。相手のファイルを読んでからすり合わせる普通の保存だと、
+   古い合言葉で読めないファイルが永久に取り残されてしまうため。 */
+async function forceReplace(key){
+  const value = key==="expenses"? sortExp(expenses) : key==="chat"? sortChat(chat) : clone(S);
+  for (let i=0;i<3;i++){
+    const g=await ghGet(key).catch(()=>({missing:true, sha:null}));
+    const r=await ghPut(key, await seal(value), g.sha, "家計："+FILE_LABEL[key]+"を今の合言葉で書き直す");
+    if (r.conflict) continue;
+    sha[key]=r.sha; pushed[key]=JSON.stringify(value); encTrouble.delete(key);
+    if (key==="expenses") syncedIds=new Set(value.map(e=>e.id));
+    if (key==="chat") syncedChat=new Set(value.map(m=>m.id));
+    return true;
+  }
+  return false;
+}
+async function rekeyAll(){
+  busy++; setSync();
+  try{
+    for (const k of ["settings","expenses","chat"]) await forceReplace(k);
+    lastErr="";
+  }catch(e){ lastErr=e.message; toast("書き直せませんでした："+e.message); }
+  busy--; setSync();
+}
+
 async function pull(){
   if (mode==="local" || localDirty || busy) return;
   try{
@@ -749,9 +780,9 @@ async function pull(){
     lastErr="";
     let changed=false;
     const wasLocked=locked;
-    if (gs.missing){ sha.settings=null; } else { sha.settings=gs.sha; const v=await open(gs.data); if(v) changed=adoptSettings(v)||changed; }
-    if (ge.missing){ sha.expenses=null; syncedIds=new Set(); } else { sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) changed=adoptExpenses(v)||changed; }
-    if (gc.missing){ sha.chat=null; syncedChat=new Set(); } else { sha.chat=gc.sha; const v=await open(gc.data); if(v!==undefined) changed=adoptChat(v)||changed; }
+    if (gs.missing){ sha.settings=null; } else { sha.settings=gs.sha; const v=await open(gs.data, "settings"); if(v) changed=adoptSettings(v)||changed; }
+    if (ge.missing){ sha.expenses=null; syncedIds=new Set(); } else { sha.expenses=ge.sha; const v=await open(ge.data, "expenses"); if(v!==undefined) changed=adoptExpenses(v)||changed; }
+    if (gc.missing){ sha.chat=null; syncedChat=new Set(); } else { sha.chat=gc.sha; const v=await open(gc.data, "chat"); if(v!==undefined) changed=adoptChat(v)||changed; }
     if ((changed || locked!==wasLocked) && !editing()) render();
   }catch(e){ lastErr=e.message; }
   setSync();
@@ -773,7 +804,7 @@ async function ghConnect(tk){
     const info=await r.json();
     if (info.permissions && info.permissions.push===false) throw new Error("このトークンには書き込みの権限がありません");
     const gs=await ghGet("settings");
-    const gsv=gs.missing? null : await open(gs.data);
+    const gsv=gs.missing? null : await open(gs.data, "settings");
     if (gsv===undefined) throw new Error("GitHub側は合言葉で暗号化されています。つないだあとに合言葉を入れてください");
     if (gsv){
       const remoteFirst = confirm("GitHubに保存されている内容を読み込みますか？\n\nOK：GitHub側の内容にそろえる\nキャンセル：この端末の内容でGitHub側を上書きする");
@@ -781,7 +812,7 @@ async function ghConnect(tk){
       else { sha.settings=gs.sha; pushed.settings=null; }
     } else { sha.settings=gs.missing? null : gs.sha; pushed.settings=null; }
     const ge=await ghGet("expenses");
-    if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) adoptExpenses(v); } else { sha.expenses=null; syncedIds=new Set(); }
+    if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data, "expenses"); if(v!==undefined) adoptExpenses(v); } else { sha.expenses=null; syncedIds=new Set(); }
     try{ localStorage.setItem(TOKEN_KEY, token); }catch(e){}
     mode="github"; localDirty=false; lastErr=""; connectErr="";
     busy--; setSync();
@@ -816,10 +847,10 @@ async function boot(){
     const [gs,ge]=await Promise.all([ghGet("settings"), ghGet("expenses")]);
     if (gs.missing && ge.missing && !token){ mode="local"; setSync(); return; }
     mode = token ? "github" : "readonly";
-    if (!gs.missing){ sha.settings=gs.sha; const v=await open(gs.data); if(v) adoptSettings(v); }
-    if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data); if(v!==undefined) adoptExpenses(v); }
+    if (!gs.missing){ sha.settings=gs.sha; const v=await open(gs.data, "settings"); if(v) adoptSettings(v); }
+    if (!ge.missing){ sha.expenses=ge.sha; const v=await open(ge.data, "expenses"); if(v!==undefined) adoptExpenses(v); }
     const gc=await ghGet("chat").catch(()=>({missing:true}));
-    if (!gc.missing){ sha.chat=gc.sha; const v=await open(gc.data); if(v!==undefined) adoptChat(v); }
+    if (!gc.missing){ sha.chat=gc.sha; const v=await open(gc.data, "chat"); if(v!==undefined) adoptChat(v); }
     render(); setSync(); startPoll();
     if (invite.token && mode==="github" && !locked) toast("招待リンクからつなぎました");
     if (mode==="github" && !locked){ await pushSettings(); if(expenses.length) await pushExpenses(); if(chat.length) await pushChat(); }
@@ -978,6 +1009,18 @@ async function readReceipt(file){
 }
 
 /* ---------- 描画ヘルパー ---------- */
+function troubleCard(){
+  if (locked || !encTrouble.size) return "";
+  const names=[...encTrouble].map(k=>FILE_LABEL[k]).join("・");
+  return `<div class="grid"><section class="card s12" style="border-color:var(--bad)">
+    <h2 style="color:var(--bad)">${esc(names)}が読めません</h2>
+    <p class="sub">${esc(names)}は、いま入れている合言葉とは<b>別の合言葉</b>で保存されています。
+      もう一方の端末で使っている合言葉を入れれば読めます。</p>
+    <div class="row"><button class="btn small" data-act="fixEnc">この端末の内容で作り直す</button>
+      <button class="btn small" data-act="relock">別の合言葉を入れ直す</button></div>
+    <p class="note">作り直すと、GitHub上の${esc(names)}はこの端末が持っている内容で上書きされます。読めないままの中身は戻せません。</p>
+  </section></div>`;
+}
 function lockCard(){
   return `<div class="grid"><section class="card s12" style="max-width:520px;margin:32px auto">
     <h2>合言葉を入れてください</h2>
@@ -1460,8 +1503,8 @@ function render(){
   const un=unreadCount();
   const ct=document.querySelector('[data-tab="chat"]');
   if (ct) ct.innerHTML = "チャット"+(un&&tab!=="chat"? `<span class="tabdot" aria-label="新しい発言があります"></span>` : "");
-  v.innerHTML = tab==="home"?viewHome(): tab==="initial"?viewInitial(): tab==="budget"?viewBudget():
-                tab==="chat"?viewChat(): viewLog();
+  v.innerHTML = troubleCard() + (tab==="home"?viewHome(): tab==="initial"?viewInitial(): tab==="budget"?viewBudget():
+                tab==="chat"?viewChat(): viewLog());
   if (tab==="chat"){
     const w=$("#chatwrap"); if(w) w.scrollTop=w.scrollHeight;
     markChatSeen();
@@ -1500,6 +1543,17 @@ document.addEventListener("click", async e=>{
     deletedIds.add(id); expenses=expenses.filter(x=>x.id!==id); saveExpensesSoon(); render(); toast("削除しました"); }
   if (act==="ghConnect"){ const el=$("#ghToken"); const v=el?el.value:""; if(el) el.value=""; await ghConnect(v); return; }
   if (act==="ghDisconnect"){ ghDisconnect(); return; }
+  if (act==="fixEnc"){
+    if (!canWrite()){ nudge(); return; }
+    const names=[...encTrouble].map(k=>FILE_LABEL[k]).join("・");
+    if (!confirm(names+"を、この端末の内容で作り直しますか？\n\nGitHub上の"+names+"は上書きされ、読めないままの中身は戻せません。")) return;
+    for (const k of [...encTrouble]) await forceReplace(k);
+    render(); toast("作り直しました");
+    return; }
+  if (act==="relock"){
+    pass=""; cryptoKey=null; cryptoSalt=null; locked=true; encTrouble.clear();
+    try{ localStorage.removeItem(PASS_KEY); }catch(err){}
+    render(); return; }
   if (act==="setMe"){ me=+t.dataset.i; try{ localStorage.setItem(ME_KEY, String(me)); }catch(err){} markChatSeen(); render(); return; }
   if (act==="switchMe"){ me=null; try{ localStorage.removeItem(ME_KEY); }catch(err){} render(); return; }
   if (act==="delMsg"){
@@ -1519,8 +1573,7 @@ document.addEventListener("click", async e=>{
     if (String(p2)!==v1){ alert("2回目が一致しませんでした。もう一度お試しください。"); return; }
     pass=v1; cryptoSalt=null; cryptoKey=null;
     try{ localStorage.setItem(PASS_KEY, pass); }catch(err){}
-    pushed.settings=null; pushed.expenses=null; pushed.chat=null;
-    await pushSettings(); await pushExpenses(); if(chat.length) await pushChat();
+    await rekeyAll();
     render(); toast("合言葉をかけました。相手にも同じ合言葉を伝えてください");
     return; }
   if (act==="passClear"){
@@ -1528,8 +1581,7 @@ document.addEventListener("click", async e=>{
     if (!confirm("暗号化をやめますか？\n\nやめると、家計と家計簿の中身がGitHub上で誰にでも読める状態に戻ります。")) return;
     pass=""; cryptoSalt=null; cryptoKey=null;
     try{ localStorage.removeItem(PASS_KEY); }catch(err){}
-    pushed.settings=null; pushed.expenses=null; pushed.chat=null;
-    await pushSettings(); await pushExpenses(); if(chat.length) await pushChat();
+    await rekeyAll();
     render(); toast("暗号化をやめました");
     return; }
   if (act==="ghInvite"){
@@ -1587,12 +1639,17 @@ document.addEventListener("submit", async e=>{
     e.preventDefault();
     const v=$("#passIn").value;
     if (!v) return;
-    const g=await ghGet("settings").catch(()=>null);
-    if (!g || g.missing){ toast("GitHubのデータが読めませんでした"); return; }
-    if (!(await canOpen(g.data, v))){ toast("合言葉が違います"); return; }
-    pass=v; cryptoKey=null; locked=false;
+    const gs=await Promise.all([
+      ghGet("settings").catch(()=>null), ghGet("expenses").catch(()=>null), ghGet("chat").catch(()=>null)]);
+    const found=gs.filter(g=>g && !g.missing);
+    if (!found.length){ toast("GitHubのデータが読めませんでした"); return; }
+    let okAny=false;
+    for (const g of found){ if (await canOpen(g.data, v)){ okAny=true; break; } }
+    if (!okAny){ toast("合言葉が違います"); return; }
+    pass=v; cryptoKey=null; cryptoSalt=null; locked=false; encTrouble.clear();
     try{ localStorage.setItem(PASS_KEY, pass); }catch(err){}
-    await pull(); render(); toast("開きました");
+    await pull(); render();
+    toast(encTrouble.size? [...encTrouble].map(k=>FILE_LABEL[k]).join("・")+"はこの合言葉では読めません" : "開きました");
     return;
   }
   if (e.target.id==="chatForm"){

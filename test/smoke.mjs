@@ -39,7 +39,7 @@ const ok = (c,m)=>{ console.log((c?'  ok  ':'  NG  ')+m); if(!c) fail++; };
 
 const browser = await chromium.launch(SYS ? {executablePath:SYS} : {});
 
-async function run(name, {files, token, repoStatus, hash, clipboard}, body){
+async function run(name, {files, token, pass, repoStatus, hash, clipboard}, body){
   const ctx = await browser.newContext(clipboard ? {permissions:['clipboard-read','clipboard-write']} : {});
   const puts = [], urls = [];
   /* 余計な末尾スラッシュ（/repos/owner/repo/）は、本物のGitHubなら 400 かつCORSヘッダ無しで返る。
@@ -70,6 +70,7 @@ async function run(name, {files, token, repoStatus, hash, clipboard}, body){
   page.on('pageerror', e=>errs.push(String(e)));
   page.on('console', m=>{ const t=m.text(); if(m.type()==='error' && !/ERR_CERT|fonts\.(googleapis|gstatic)|api\.github\.com|404 \(Not Found\)/.test(t+' '+(m.location()||{}).url)) errs.push('console: '+t); });
   if (token) await page.addInitScript(t=>localStorage.setItem('futari.token',t), token);
+  if (pass) await page.addInitScript(p=>localStorage.setItem('futari.pass',p), pass);
   await page.goto(url + (hash||''));
   await page.waitForTimeout(900);
   console.log('\n['+name+']');
@@ -336,6 +337,57 @@ await run('レシート読み取り', {files:{settings:null, expenses:null}}, as
   ok((await page.inputValue('#e-memo')).length>0, 'メモに店名が入る');
   // 読み取っただけでは記録しない
   ok((await page.textContent('#view')).includes('確かめてから'), '確認を促す');
+});
+
+// 17〜19) 合言葉を変えたとき・食い違ったときの立て直し
+const PASS2 = 'あたらしい合言葉';
+const rekeyFiles = {settings:null, expenses:null, chat:null};
+
+await run('合言葉を変えても取り残さない', {files:rekeyFiles, token:'github_pat_owner'}, async (page,{puts})=>{
+  const answers = [PASS, PASS, PASS2, PASS2];
+  page.on('dialog', d=>d.accept(answers.shift() ?? ''));
+  // 先に家計簿とチャットに中身を入れておく
+  await page.click('[data-tab="log"]'); await page.waitForTimeout(200);
+  await page.fill('#e-amount','1200'); await page.click('#expForm button[type=submit]'); await page.waitForTimeout(900);
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="setMe"][data-i="0"]'); await page.waitForTimeout(150);
+  await page.fill('#chatText','やっほー'); await page.click('#chatForm button[type=submit]'); await page.waitForTimeout(900);
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="passSet"]'); await page.waitForTimeout(2500);
+  ok(rekeyFiles.settings.enc==='aes-gcm' && rekeyFiles.expenses.enc==='aes-gcm' && rekeyFiles.chat.enc==='aes-gcm', '3つとも暗号化される');
+  await page.click('[data-act="passChange"]'); await page.waitForTimeout(3000);
+  const salts = new Set([rekeyFiles.settings.salt, rekeyFiles.expenses.salt, rekeyFiles.chat.salt]);
+  ok(salts.size===1, '変更後は3つとも同じ鍵で書き直される');
+});
+
+await run('新しい合言葉で開き直せる', {files:{...rekeyFiles}, token:'github_pat_owner', pass:PASS2}, async (page)=>{
+  const view = await page.textContent('#view');
+  ok(!view.includes('合言葉を入れてください'), '新しい合言葉でそのまま開く');
+  ok(!view.includes('読めません'), '読めないファイルが残っていない');
+  await page.click('[data-tab="log"]'); await page.waitForTimeout(250);
+  ok((await page.textContent('#view')).includes('¥1,200'), '変更前の家計簿が読める');
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(250);
+  await page.click('[data-act="setMe"][data-i="0"]'); await page.waitForTimeout(200);
+  ok((await page.textContent('#chatwrap')).includes('やっほー'), '変更前のチャットが読める');
+});
+
+// 片方だけ別の合言葉で保存された状態（今回の不具合そのもの）
+const mixed = {...encFiles, chat:null};
+mixed.expenses = JSON.parse(JSON.stringify(encFiles.settings));
+mixed.expenses.salt = Buffer.from(Array.from({length:16},(_,i)=>i+99)).toString('base64');
+await run('片方が別の合言葉でも閉じ込められない', {files:mixed, token:'github_pat_owner'}, async (page,{puts})=>{
+  page.on('dialog', d=>d.accept());
+  await page.fill('#passIn', PASS);
+  await page.click('#lockForm button[type=submit]'); await page.waitForTimeout(2000);
+  const view = await page.textContent('#view');
+  ok(!view.includes('合言葉を入れてください'), '合言葉の画面に戻らない');
+  ok(view.includes('ふたり暮らしの生活費'), '読めるものは見える');
+  ok(view.includes('家計簿が読めません'), 'どれが読めないか名指しする');
+  ok((await page.textContent('#toast')).includes('家計簿'), '知らせも出る');
+  const before = puts.length;
+  await page.click('[data-act="fixEnc"]'); await page.waitForTimeout(1500);
+  ok(puts.length>before && puts.filter(p=>p.key==='expenses').length>0, '作り直すとGitHubに書き直す');
+  ok(!(await page.textContent('#view')).includes('家計簿が読めません'), '作り直すと警告が消える');
 });
 
 await browser.close(); srv.close();
