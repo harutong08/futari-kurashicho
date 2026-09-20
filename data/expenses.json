@@ -1,0 +1,9 @@
+{
+ "v": 1,
+ "enc": "aes-gcm",
+ "kdf": "pbkdf2-sha256",
+ "iter": 200000,
+ "salt": "mKyLMy61CzU6e3Zuv2GnBQ==",
+ "iv": "7umAyGBiZP3ez4MW",
+ "data": "9UWu45DEVGTZBg3/D8cANiw5"
+}
