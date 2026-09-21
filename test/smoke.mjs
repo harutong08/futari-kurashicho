@@ -50,7 +50,7 @@ async function run(name, {files, token, pass, repoStatus, hash, clipboard}, body
     urls.push(m+' '+u);
     if (STRAY_SLASH.test(u)) return route.fulfill({status:400, body:'{"message":"Bad Request"}'});
     if (m==='OPTIONS') return route.fulfill({status:204, headers:CORS});
-    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : 'expenses';
+    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : 'expenses';
     if (m==='PUT'){ const key = keyOf(u);
       const b = JSON.parse(req.postData()||'{}');
       puts.push({key, data: JSON.parse(Buffer.from(b.content,'base64').toString('utf8'))});
@@ -388,6 +388,56 @@ await run('片方が別の合言葉でも閉じ込められない', {files:mixed
   await page.click('[data-act="fixEnc"]'); await page.waitForTimeout(1500);
   ok(puts.length>before && puts.filter(p=>p.key==='expenses').length>0, '作り直すとGitHubに書き直す');
   ok(!(await page.textContent('#view')).includes('家計簿が読めません'), '作り直すと警告が消える');
+});
+
+// 20〜21) やることリスト
+await run('やることリスト', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{puts,files})=>{
+  ok((await page.textContent('#view')).includes('やることリスト'), 'ホームに出る');
+  ok(await page.locator('.chips button').count()>0, '最初はよくあるやることを勧める');
+  // 勧められたものを1つ追加
+  const first = await page.locator('.chips button').first().textContent();
+  await page.locator('.chips button').first().click(); await page.waitForTimeout(800);
+  ok((await page.textContent('.todos')).includes(first.replace('＋ ','')), '押すと追加される');
+  // 自分で書いて追加（期限つき）
+  await page.fill('#todoText', '内見の予約をする');
+  await page.fill('#todoDue', '2026-09-30');
+  await page.click('#todoForm button[type=submit]'); await page.waitForTimeout(800);
+  ok((await page.textContent('.todos')).includes('内見の予約をする'), '書いたものが追加される');
+  ok((await page.textContent('.todos')).includes('9/30'), '期限が出る');
+  ok((await page.inputValue('#todoText'))==='', '追加すると入力欄が空になる');
+  const t = puts.filter(p=>p.key==='todos').pop();
+  ok(t && t.data.some(x=>x.text==='内見の予約をする' && x.due==='2026-09-30'), 'GitHubに書き込まれる');
+  // チェックすると終わり扱いになって下に移る
+  await page.locator('.todos input[type=checkbox]').last().check(); await page.waitForTimeout(900);
+  ok(await page.locator('.todos li.done').count()===1, 'チェックすると終わり表示になる');
+  ok((await page.textContent('#view')).includes('終わった 1 件'), '残りと終わりの数が出る');
+  ok(await page.locator('.todos li').last().evaluate(el=>el.classList.contains('done')), '終わったものは下に移る');
+  const t2 = puts.filter(p=>p.key==='todos').pop();
+  ok(t2.data.some(x=>x.done===true), '終わりもGitHubに反映される');
+  // 相手が足した分を取り込む
+  files.todos = [...t2.data, {id:'todo-partner', text:'退去の連絡をする', due:'', done:false, by:1, at:Date.now()}];
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(150);
+  await page.click('[data-act="ghSync"]'); await page.waitForTimeout(800);
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(250);
+  ok((await page.textContent('.todos')).includes('退去の連絡をする'), '相手が足した分が出る');
+  // 終わった分をまとめて消す
+  page.on('dialog', d=>d.accept());
+  await page.click('[data-act="clearDone"]'); await page.waitForTimeout(900);
+  ok(await page.locator('.todos li.done').count()===0, '終わった分を消せる');
+  const t3 = puts.filter(p=>p.key==='todos').pop();
+  ok(!t3.data.some(x=>x.done), '消したことがGitHubにも反映される');
+  ok(t3.data.some(x=>x.id==='todo-partner'), '相手の分は残る');
+});
+
+await run('やることリストも暗号化される', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{puts})=>{
+  const answers=[PASS,PASS];
+  page.on('dialog', d=>d.accept(answers.shift() ?? ''));
+  await page.fill('#todoText','こっそり調べる'); await page.click('#todoForm button[type=submit]'); await page.waitForTimeout(800);
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="passSet"]'); await page.waitForTimeout(3000);
+  const t = puts.filter(p=>p.key==='todos').pop();
+  ok(t && t.data.enc==='aes-gcm', 'やることリストも暗号化して保存する');
+  ok(!JSON.stringify(t.data).includes('こっそり'), '中身が読み取れない');
 });
 
 await browser.close(); srv.close();
