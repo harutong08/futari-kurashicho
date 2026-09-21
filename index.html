@@ -1,5 +1,10 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self' https://api.github.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self' https://api.github.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; manifest-src 'self'; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>ふたりの信州暮らし帳</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#2F6B5B">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="暮らし帳">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8F%94%EF%B8%8F%3C/text%3E%3C/svg%3E">
 <meta name="description" content="松本・塩尻・安曇野での同棲にかかるお金の試算と、2人で使う家計簿">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -443,6 +448,8 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
 /* 相手の変更を読みに行く間隔。トークンありは1時間5,000回まで使えるので、10秒でも
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
+/* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
+const APP_VERSION = "2026-09-21a";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -943,8 +950,62 @@ async function boot(){
     if (token) toast("GitHubにつなげませんでした："+e.message);
   }
 }
-document.addEventListener("visibilitychange", ()=>{ if(!document.hidden) pull(); });
-window.addEventListener("focus", ()=>{ pull(); });
+/* ===== 自動更新 =====
+   「ホーム画面に追加」で使うと、ブラウザが古いページを抱え込んで新しい版に変わらない。
+   sw.js が毎回ネットワークを先に見に行き、新しい版が用意できたら、
+   入力中でない頃合いを見て自動で入れ替える。 */
+let swReg=null, updateReady=false, swapping=false;
+const hadController = ("serviceWorker" in navigator) && !!navigator.serviceWorker.controller;
+
+function updateBlocked(){
+  const a=document.activeElement;
+  if (a && /INPUT|TEXTAREA|SELECT/.test(a.tagName)) return true;   /* 入力中は待つ */
+  if (busy>0) return true;                                          /* 保存中は待つ */
+  if (typeof ocrBusy!=="undefined" && ocrBusy) return true;         /* 読み取り中は待つ */
+  return false;
+}
+function applyUpdate(){
+  if (!updateReady || swapping) return;
+  if (updateBlocked()){ setTimeout(applyUpdate, 5000); return; }
+  swapping=true;
+  toast("新しい版に切り替えます…");
+  setTimeout(()=>{
+    if (swReg && swReg.waiting) swReg.waiting.postMessage({type:"SKIP_WAITING"});
+    else location.reload();
+  }, 700);
+}
+function noteUpdate(){
+  if (updateReady) return;
+  updateReady=true;
+  applyUpdate();
+}
+async function setupSW(){
+  if (!("serviceWorker" in navigator) || location.protocol==="file:") return;
+  try{
+    swReg=await navigator.serviceWorker.register("sw.js", {scope:"./", updateViaCache:"none"});
+    navigator.serviceWorker.addEventListener("controllerchange", ()=>{
+      /* 初めて取り付けたときは切り替えではないので、読み込み直さない */
+      if (!hadController && !swapping) return;
+      if (swapping || hadController){ swapping=true; location.reload(); }
+    });
+    if (swReg.waiting && hadController) noteUpdate();
+    swReg.addEventListener("updatefound", ()=>{
+      const nw=swReg.installing;
+      if (!nw) return;
+      nw.addEventListener("statechange", ()=>{
+        if (nw.state==="installed" && navigator.serviceWorker.controller) noteUpdate();
+      });
+    });
+    setInterval(()=>{ if(swReg) swReg.update().catch(()=>{}); }, 30*60*1000);
+  }catch(e){}
+}
+document.addEventListener("visibilitychange", ()=>{
+  if (document.hidden) return;
+  pull();
+  if (swReg) swReg.update().catch(()=>{});
+  applyUpdate();
+});
+window.addEventListener("focus", ()=>{ pull(); applyUpdate(); });
 
 /* ===== レシートの読み取り =====
    同梱した Tesseract（vendor/）をブラウザの中だけで動かす。画像はどこにも送らないし保存もしない。
@@ -1162,6 +1223,7 @@ function syncCard(){
       <p class="sub">設定と家計簿を、このサイトと同じリポジトリのJSONファイルに保存します</p></div>
       <span class="pill ${st.pill}">${st.t}</span></div>
     <div class="stack" style="gap:10px">${body}
+      <p class="note" style="margin:0">この版：${esc(APP_VERSION)}　新しい版が出たら、開いているだけで自動で入れ替わります。</p>
       <div class="callout warn" style="font-size:13px"><b>公開リポジトリです。</b>
         保存した家計のデータ（収入・貯金額・支出の記録）は、URLを知らない人でもGitHub上で見られます。
         見られて困る内容は入れないでください。</div>
@@ -1842,7 +1904,7 @@ document.addEventListener("submit", async e=>{
   const a=$("#e-amount"); if(a) a.focus();
 });
 
-boot();
+boot(); setupSW();
 })();
 </script>
 

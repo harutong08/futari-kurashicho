@@ -12,12 +12,17 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const HTML = readFileSync(join(ROOT, 'index.html'));
 const TYPES = {'.js':'text/javascript', '.json':'application/json', '.wasm':'application/wasm',
-               '.png':'image/png', '.txt':'text/plain'};
+               '.png':'image/png', '.txt':'text/plain', '.webmanifest':'application/manifest+json'};
 /* この環境にはPlaywright同梱のブラウザがないことがあるので、あればシステムのChromiumを使う */
 const SYS = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => existsSync(p));
 /* index.html のほか、同梱した読み取り部品（vendor/）も本番と同じように配る */
+const overrides = new Map();   /* 更新の試験で中身を差し替えるため */
 const srv = createServer((q,r)=>{
   const path = decodeURIComponent((q.url||'/').split('?')[0]);
+  if (overrides.has(path)){
+    r.writeHead(200,{'content-type': path.endsWith('.js')?'text/javascript':'text/plain','cache-control':'no-store'});
+    r.end(overrides.get(path)); return;
+  }
   if (path==='/' || path==='/index.html'){
     r.writeHead(200,{'content-type':'text/html; charset=utf-8'}); r.end(HTML); return;
   }
@@ -26,7 +31,7 @@ const srv = createServer((q,r)=>{
   try{
     const buf = readFileSync(join(ROOT, rel));
     const ext = (rel.match(/\.[a-z0-9]+$/i)||[''])[0].toLowerCase();
-    r.writeHead(200,{'content-type': TYPES[ext] || 'application/octet-stream'});
+    r.writeHead(200,{'content-type': TYPES[ext] || 'application/octet-stream', 'cache-control':'no-store'});
     r.end(buf);
   }catch(e){ r.writeHead(404); r.end(); }
 });
@@ -36,6 +41,15 @@ const url = 'http://127.0.0.1:'+srv.address().port+'/';
 const CORS = {'access-control-allow-origin':'*','access-control-allow-headers':'*','access-control-allow-methods':'GET,PUT,OPTIONS'};
 let fail = 0;
 const ok = (c,m)=>{ console.log((c?'  ok  ':'  NG  ')+m); if(!c) fail++; };
+
+// sw.js と index.html の版がズレていると、更新が永久に掛からない事故になる
+{
+  const sw = readFileSync(join(ROOT,'sw.js'),'utf8');
+  const a = (HTML.toString().match(/APP_VERSION\s*=\s*"([^"]+)"/)||[])[1];
+  const b = (sw.match(/VERSION\s*=\s*"([^"]+)"/)||[])[1];
+  console.log('\n[版の一致]');
+  ok(!!a && a===b, `index.html と sw.js の版が同じ（${a} / ${b}）`);
+}
 
 const browser = await chromium.launch(SYS ? {executablePath:SYS} : {});
 
@@ -438,6 +452,28 @@ await run('やることリストも暗号化される', {files:{settings:null, e
   const t = puts.filter(p=>p.key==='todos').pop();
   ok(t && t.data.enc==='aes-gcm', 'やることリストも暗号化して保存する');
   ok(!JSON.stringify(t.data).includes('こっそり'), '中身が読み取れない');
+});
+
+// 22) アプリとして入れたときの自動更新
+await run('自動更新', {files:{settings:null, expenses:null, chat:null, todos:null}}, async (page)=>{
+  // 付属品が配られているか
+  for (const f of ['manifest.webmanifest','sw.js','icon-192.png','icon-512.png','apple-touch-icon.png']){
+    const res = await page.request.get(url+f);
+    ok(res.status()===200, f+' が配られている');
+  }
+  const man = await (await page.request.get(url+'manifest.webmanifest')).json();
+  ok(man.display==='standalone' && man.start_url==='./', 'アプリとして開く設定になっている');
+  // 取り付けられたか
+  await page.waitForFunction(()=>!!navigator.serviceWorker.controller, null, {timeout:20000});
+  ok(true, '更新のしくみが取り付けられる');
+  // 新しい版を置くと、自分で読み込み直すか
+  await page.evaluate(()=>{ window.__before = true; });
+  const sw = readFileSync(join(ROOT,'sw.js'),'utf8').replace(/VERSION = "[^"]+"/, 'VERSION = "9999-99-99z"');
+  overrides.set('/sw.js', sw);
+  await page.evaluate(()=>navigator.serviceWorker.getRegistration().then(r=>r && r.update()));
+  await page.waitForFunction(()=>window.__before===undefined, null, {timeout:40000});
+  ok(true, '新しい版が出ると自分で切り替わる');
+  overrides.delete('/sw.js');
 });
 
 await browser.close(); srv.close();
