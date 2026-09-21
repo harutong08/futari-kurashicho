@@ -209,16 +209,29 @@ svg text{font-family:var(--f-num)}
 textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
 
 /* todo */
-.todos{list-style:none;margin:10px 0 0;padding:0}
-.todos li{display:grid;grid-template-columns:22px 1fr auto auto 30px;gap:10px;align-items:center;padding:9px 0;border-bottom:1px solid var(--line)}
-.todos li:last-child{border-bottom:0}
-.todos input[type=checkbox]{width:19px;height:19px;accent-color:var(--accent);cursor:pointer}
-.todos .t{min-width:0;overflow-wrap:anywhere}
-.todos li.done .t{color:var(--faint);text-decoration:line-through}
-.todos .due{font-size:12px;color:var(--muted);font-family:var(--f-num);white-space:nowrap}
-.todos .due.soon{color:var(--warn);font-weight:700}
-.todos .due.over{color:var(--bad);font-weight:700}
-.todos .by{font-size:11px;padding:1px 7px;border-radius:99px;font-weight:700;white-space:nowrap}
+.todos{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:8px}
+.todos li{display:grid;grid-template-columns:22px 1fr auto auto 30px;gap:10px;align-items:center;
+  padding:11px 13px;border:1px solid var(--line);border-left:5px solid var(--line);border-radius:12px;background:var(--surface)}
+.todos li.st-over{background:var(--bad-soft);border-color:transparent;border-left-color:var(--bad)}
+.todos li.st-soon{background:var(--warn-soft);border-color:transparent;border-left-color:var(--warn)}
+.todos li.st-later{border-left-color:var(--accent)}
+.todos li.st-none{border-left-color:var(--faint)}
+.todos li.st-done{background:transparent;border-color:var(--line);border-left-color:var(--line);opacity:.6}
+.todos input[type=checkbox]{width:20px;height:20px;accent-color:var(--accent);cursor:pointer}
+.todos li.st-over input[type=checkbox]{accent-color:var(--bad)}
+.todos li.st-soon input[type=checkbox]{accent-color:var(--warn)}
+.todos .t{min-width:0;overflow-wrap:anywhere;font-weight:500}
+.todos li.st-over .t{color:var(--bad)}
+.todos li.st-done .t{color:var(--faint);text-decoration:line-through;font-weight:400}
+.todos .due{font-size:12px;font-weight:700;font-family:var(--f-num);white-space:nowrap;
+  padding:3px 10px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
+.todos li.st-over .due{background:var(--surface);color:var(--bad)}
+.todos li.st-soon .due{background:var(--surface);color:var(--warn)}
+.todos li.st-later .due{background:var(--accent-soft);color:var(--accent)}
+.todos li.st-done .due{background:transparent;color:var(--faint);font-weight:400}
+.todos .by{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:700;white-space:nowrap}
+.todos li.st-done .by{background:var(--surface-2)!important;color:var(--faint)!important}
+.tally{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
 .todoform{display:flex;gap:8px;flex-wrap:wrap}
 .todoform .in.text{flex:1 1 220px;min-width:0}
 .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
@@ -449,7 +462,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-21b";
+const APP_VERSION = "2026-09-21c";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1299,12 +1312,15 @@ const TODO_SUGGEST=[
   "引越し業者に見積もり依頼","家具・家電の買い物リストを作る","住民票の異動",
   "電気・ガス・水道の手続き","ネット回線の申し込み","分担の決めごとを話す"
 ];
-function dueClass(due){
-  if (!due) return "";
+/* 期限の切迫ぐあい。色分けの元になる
+   over=過ぎている / soon=3日以内 / later=まだ先 / none=期限なし */
+function dueState(t){
+  if (t.done) return "st-done";
+  if (!t.due) return "st-none";
   const today=todayStr();
-  if (due<today) return "over";
-  const d=new Date(due), n=new Date(today);
-  return (d-n)<=86400000*3 ? "soon" : "";
+  if (t.due<today) return "st-over";
+  const d=new Date(t.due), n=new Date(today);
+  return (d-n)<=86400000*3 ? "st-soon" : "st-later";
 }
 function dueLabel(due){
   if (!due) return "";
@@ -1317,19 +1333,26 @@ function dueLabel(due){
 }
 function todoCard(){
   const open_=todos.filter(t=>!t.done), done=todos.filter(t=>t.done);
+  const over=open_.filter(t=>dueState(t)==="st-over"), soon=open_.filter(t=>dueState(t)==="st-soon");
   const rows=sortTodos(todos).map(t=>{
-    const cls=dueClass(t.due), who=(t.by===0||t.by===1)? S.names[t.by] : "";
-    return `<li class="todo ${t.done?"done":""}">
+    const st=dueState(t), who=(t.by===0||t.by===1)? S.names[t.by] : "";
+    const dl=t.due? dueLabel(t.due) : (t.done? "" : "期限なし");
+    return `<li class="todo ${st}">
       <input type="checkbox" data-todo="${esc(t.id)}" ${t.done?"checked":""} aria-label="${esc(t.text)}を終わりにする">
       <span class="t">${esc(t.text)}</span>
-      <span class="due ${cls}">${esc(dueLabel(t.due))}</span>
-      <span class="by ${t.by===1?"b":"a"}" style="background:var(--p${t.by===1?"b":"a"}-soft);color:var(--p${t.by===1?"b":"a"})">${esc(who)}</span>
+      <span class="due">${esc(dl)}</span>
+      ${who? `<span class="by" style="background:var(--p${t.by===1?"b":"a"}-soft);color:var(--p${t.by===1?"b":"a"})">${esc(who)}</span>` : `<span></span>`}
       <button class="icon" data-act="delTodo" data-id="${esc(t.id)}" aria-label="${esc(t.text)}を消す">×</button>
     </li>`;
   }).join("");
   return `<section class="card s12">
     <div class="row between"><div><h2>やることリスト</h2>
-      <p class="sub">${todos.length? `残り <b style="color:var(--ink)">${open_.length}</b> 件${done.length? `・終わった ${done.length} 件`:""}` : "引越しまでの段取りを2人で共有できます"}</p></div>
+      ${todos.length? `<div class="tally">
+        ${over.length? `<span class="pill bad">期限すぎ ${over.length}</span>`:""}
+        ${soon.length? `<span class="pill warn">3日以内 ${soon.length}</span>`:""}
+        <span class="pill ${open_.length?"neutral":"good"}">残り ${open_.length}</span>
+        ${done.length? `<span class="pill good">終わった ${done.length}</span>`:""}
+      </div>` : `<p class="sub">引越しまでの段取りを2人で共有できます</p>`}</div>
       ${done.length? `<button class="btn ghost small" data-act="clearDone">終わった分を消す</button>`:""}</div>
     <form class="todoform" id="todoForm" autocomplete="off">
       <input class="in text" id="todoText" maxlength="80" placeholder="例：物件の内見を予約する" aria-label="やること">

@@ -422,14 +422,38 @@ await run('やることリスト', {files:{settings:null, expenses:null, chat:nu
   await page.click('#todoForm button[type=submit]'); await page.waitForTimeout(800);
   ok((await page.textContent('.todos')).includes('内見の予約をする'), '書いたものが追加される');
   ok((await page.textContent('.todos')).includes('9/30'), '期限が出る');
+  // 期限の切迫ぐあいで色が変わる
+  const mk = async (text, offsetDays)=>{
+    const d = offsetDays===null ? '' : await page.evaluate(n=>{
+      const x=new Date(); x.setDate(x.getDate()+n);
+      return x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0');
+    }, offsetDays);
+    await page.fill('#todoText', text);
+    if (d) await page.fill('#todoDue', d); else await page.fill('#todoDue','');
+    await page.click('#todoForm button[type=submit]'); await page.waitForTimeout(700);
+  };
+  await mk('期限を過ぎたやつ', -3);
+  await mk('あさってのやつ', 2);
+  await mk('ずっと先のやつ', 60);
+  await mk('期限なしのやつ', null);
+  ok(await page.locator('.todos li.st-over').count()===1, '期限切れは赤の印（over）');
+  ok(await page.locator('.todos li.st-soon').count()===1, '3日以内は黄色の印（soon）');
+  ok(await page.locator('.todos li.st-later').count()>=1, '先のものは緑の印（later）');
+  ok(await page.locator('.todos li.st-none', {hasText:'期限なしのやつ'}).count()===1, '期限なしは無色の印（none）');
+  ok((await page.textContent('.tally')).includes('期限すぎ 1'), '上に期限すぎの数が出る');
+  ok((await page.textContent('.tally')).includes('3日以内 1'), '上に3日以内の数が出る');
+  ok(await page.locator('.todos li.st-over').first().evaluate(el=>{
+    const bg=getComputedStyle(el).backgroundColor, bl=getComputedStyle(el).borderLeftColor;
+    return bg!=='rgba(0, 0, 0, 0)' && bl!==getComputedStyle(el).borderTopColor;
+  }), '期限切れの行は背景と左の線が変わる');
   ok((await page.inputValue('#todoText'))==='', '追加すると入力欄が空になる');
   const t = puts.filter(p=>p.key==='todos').pop();
   ok(t && t.data.some(x=>x.text==='内見の予約をする' && x.due==='2026-09-30'), 'GitHubに書き込まれる');
   // チェックすると終わり扱いになって下に移る
   await page.locator('.todos input[type=checkbox]').last().check(); await page.waitForTimeout(900);
-  ok(await page.locator('.todos li.done').count()===1, 'チェックすると終わり表示になる');
-  ok((await page.textContent('#view')).includes('終わった 1 件'), '残りと終わりの数が出る');
-  ok(await page.locator('.todos li').last().evaluate(el=>el.classList.contains('done')), '終わったものは下に移る');
+  ok(await page.locator('.todos li.st-done').count()===1, 'チェックすると終わり表示になる');
+  ok((await page.textContent('.tally')).includes('終わった 1'), '残りと終わりの数が出る');
+  ok(await page.locator('.todos li').last().evaluate(el=>el.classList.contains('st-done')), '終わったものは下に移る');
   const t2 = puts.filter(p=>p.key==='todos').pop();
   ok(t2.data.some(x=>x.done===true), '終わりもGitHubに反映される');
   // 相手が足した分を取り込む
@@ -441,7 +465,7 @@ await run('やることリスト', {files:{settings:null, expenses:null, chat:nu
   // 終わった分をまとめて消す
   page.on('dialog', d=>d.accept());
   await page.click('[data-act="clearDone"]'); await page.waitForTimeout(900);
-  ok(await page.locator('.todos li.done').count()===0, '終わった分を消せる');
+  ok(await page.locator('.todos li.st-done').count()===0, '終わった分を消せる');
   const t3 = puts.filter(p=>p.key==='todos').pop();
   ok(!t3.data.some(x=>x.done), '消したことがGitHubにも反映される');
   ok(t3.data.some(x=>x.id==='todo-partner'), '相手の分は残る');
