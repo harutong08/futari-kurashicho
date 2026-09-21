@@ -407,6 +407,10 @@ await run('片方が別の合言葉でも閉じ込められない', {files:mixed
 // 20〜21) やることリスト
 await run('やることリスト', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{puts,files})=>{
   ok((await page.textContent('#view')).includes('やることリスト'), 'ホームに出る');
+  ok(await page.evaluate(()=>{
+    const cards=[...document.querySelectorAll('#view .card')];
+    return cards.length>0 && cards[0].textContent.includes('やることリスト');
+  }), 'ホームのいちばん上にある');
   ok(await page.locator('.chips button').count()>0, '最初はよくあるやることを勧める');
   // 勧められたものを1つ追加
   const first = await page.locator('.chips button').first().textContent();

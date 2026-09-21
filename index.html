@@ -449,7 +449,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-21a";
+const APP_VERSION = "2026-09-21b";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1349,6 +1349,8 @@ function viewHome(){
   const mExp=expenses.filter(e=>(e.date||"").slice(0,7)===todayStr().slice(0,7)); const spent=mExp.reduce((a,e)=>a+(+e.amount||0),0);
   const prog = p.tgt? Math.min(1,p.cur/p.tgt):0;
   return `<div class="grid">
+  ${todoCard()}
+
   <section class="card s12"><div class="hero">
     <div>
       <div class="eyebrow">ふたり暮らしの生活費（1か月）</div>
@@ -1372,8 +1374,6 @@ function viewHome(){
       </dl>
     </div>
   </div></section>
-
-  ${todoCard()}
 
   ${editBudget?`<section class="card s12" id="quickEdit">
     <div class="row between"><div><h2>生活費を編集</h2><p class="sub">金額を変えると、合計・分担・貯金計画がすぐ計算し直されます。項目の追加・削除は「毎月の予算」タブで</p></div>
