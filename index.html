@@ -1,7 +1,7 @@
-<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self' https://api.github.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; manifest-src 'self'; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<!doctype html><html lang="ja" data-theme="light"><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; connect-src 'self' https://api.github.com; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; child-src 'self' blob:; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; manifest-src 'self'; base-uri 'none'; form-action 'none';"><meta name="referrer" content="no-referrer"><style>:root{color-scheme:light}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#faf9f5;color:#141413}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
 <title>ふたりの信州暮らし帳</title>
 <link rel="manifest" href="manifest.webmanifest">
-<meta name="theme-color" content="#2F6B5B">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="暮らし帳">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -21,24 +21,8 @@
   --f-disp:"Zen Maru Gothic","Hiragino Maru Gothic ProN","Yu Gothic",sans-serif;
   --f-body:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic UI","Meiryo",sans-serif;
   --f-num:"Outfit","Zen Kaku Gothic New",system-ui,sans-serif;
-}
-@media (prefers-color-scheme: dark){
-  :root:not([data-theme="light"]){
-    --bg:#101715; --surface:#172220; --surface-2:#1D2A27; --ink:#E4EDEA; --muted:#98AAA5; --faint:#6F817C;
-    --line:#2A3935; --accent:#72B8A3; --accent-soft:#1F3A33; --on-accent:#0E1A17;
-    --pa:#8CA8EC; --pa-soft:#212C45; --pb:#F0A07F; --pb-soft:#3E2A22;
-    --good:#6CC48F; --good-soft:#1C3527; --warn:#E3B45A; --warn-soft:#3A2F1A; --bad:#EC7F73; --bad-soft:#3F2320;
-    --c-home:#72B8A3; --c-util:#E3B95A; --c-comm:#8FAEEA; --c-food:#EE9A76; --c-fun:#DD86AE; --c-life:#A9C47A; --c-car:#86A7B2; --c-other:#BDB2A4;
-    --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -10px rgba(0,0,0,.5);
-  }
-}
-:root[data-theme="dark"]{
-  --bg:#101715; --surface:#172220; --surface-2:#1D2A27; --ink:#E4EDEA; --muted:#98AAA5; --faint:#6F817C;
-  --line:#2A3935; --accent:#72B8A3; --accent-soft:#1F3A33; --on-accent:#0E1A17;
-  --pa:#8CA8EC; --pa-soft:#212C45; --pb:#F0A07F; --pb-soft:#3E2A22;
-  --good:#6CC48F; --good-soft:#1C3527; --warn:#E3B45A; --warn-soft:#3A2F1A; --bad:#EC7F73; --bad-soft:#3F2320;
-  --c-home:#72B8A3; --c-util:#E3B95A; --c-comm:#8FAEEA; --c-food:#EE9A76; --c-fun:#DD86AE; --c-life:#A9C47A; --c-car:#86A7B2; --c-other:#BDB2A4;
-  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px -10px rgba(0,0,0,.5);
+  /* 端末が暗いテーマでも、このページは白で通す */
+  color-scheme: light;
 }
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.65;padding-inline:16px;padding-block:0 64px;-webkit-font-smoothing:antialiased}
@@ -56,8 +40,6 @@ button,input,select,textarea{font:inherit;color:inherit}
 .who{display:inline-flex;align-items:center;gap:6px;padding:4px 10px 4px 4px;border-radius:999px;background:var(--surface);border:1px solid var(--line);font-size:13px;font-weight:500}
 .dot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;color:#fff;font-size:11px;font-weight:700;font-family:var(--f-disp)}
 .dot.a{background:var(--pa)} .dot.b{background:var(--pb)}
-:root[data-theme="dark"] .dot{color:#0f1715}
-@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .dot{color:#0f1715}}
 .sync{font-size:12px;color:var(--muted);display:inline-flex;align-items:center;gap:6px}
 .sync i{width:7px;height:7px;border-radius:50%;background:var(--faint)}
 .sync.on i{background:var(--good);box-shadow:0 0 0 3px var(--good-soft)}
@@ -231,6 +213,7 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
 .todos li.st-done .due{background:transparent;color:var(--faint);font-weight:400}
 .todos .by{font-size:11px;padding:2px 8px;border-radius:99px;font-weight:700;white-space:nowrap}
 .todos li.st-done .by{background:var(--surface-2)!important;color:var(--faint)!important}
+.todos .by:empty{visibility:hidden;padding:0}
 .tally{display:flex;gap:6px;flex-wrap:wrap;margin-top:2px}
 .todoform{display:flex;gap:8px;flex-wrap:wrap}
 .todoform .in.text{flex:1 1 220px;min-width:0}
@@ -462,7 +445,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-21c";
+const APP_VERSION = "2026-09-22a";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1341,7 +1324,7 @@ function todoCard(){
       <input type="checkbox" data-todo="${esc(t.id)}" ${t.done?"checked":""} aria-label="${esc(t.text)}を終わりにする">
       <span class="t">${esc(t.text)}</span>
       <span class="due">${esc(dl)}</span>
-      ${who? `<span class="by" style="background:var(--p${t.by===1?"b":"a"}-soft);color:var(--p${t.by===1?"b":"a"})">${esc(who)}</span>` : `<span></span>`}
+      <span class="by"${who? ` style="background:var(--p${t.by===1?"b":"a"}-soft);color:var(--p${t.by===1?"b":"a"})"`:""}>${esc(who)}</span>
       <button class="icon" data-act="delTodo" data-id="${esc(t.id)}" aria-label="${esc(t.text)}を消す">×</button>
     </li>`;
   }).join("");

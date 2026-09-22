@@ -5,7 +5,7 @@
 
    VERSION は index.html の APP_VERSION と必ず同じ文字列にすること。
    test/smoke.mjs がズレを検出する。 */
-const VERSION = "2026-09-21c";
+const VERSION = "2026-09-22a";
 const CACHE = "futari-" + VERSION;
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png"];
 

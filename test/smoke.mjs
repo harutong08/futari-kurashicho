@@ -504,6 +504,29 @@ await run('自動更新', {files:{settings:null, expenses:null, chat:null, todos
   overrides.delete('/sw.js');
 });
 
+// 23) 端末が暗いテーマでも白で表示する
+{
+  const ctx = await browser.newContext({colorScheme:'dark'});
+  await ctx.route('https://api.github.com/**', r=>r.fulfill({status:404, headers:CORS, body:'{}'}));
+  const page = await ctx.newPage();
+  const errs=[];
+  page.on('pageerror', e=>errs.push(String(e)));
+  await page.goto(url); await page.waitForTimeout(900);
+  console.log('\n[白で統一]');
+  ok(errs.length===0, 'JSエラーなし');
+  const bg = await page.evaluate(()=>getComputedStyle(document.body).backgroundColor);
+  const ink = await page.evaluate(()=>getComputedStyle(document.body).color);
+  ok(bg==='rgb(237, 241, 239)', '端末が暗いテーマでも背景は白基調（'+bg+'）');
+  ok(ink==='rgb(28, 42, 39)', '文字は濃い色のまま（'+ink+'）');
+  ok(await page.evaluate(()=>document.documentElement.getAttribute('data-theme'))==='light', 'テーマは light で固定');
+  ok(await page.evaluate(()=>getComputedStyle(document.documentElement).colorScheme)==='light', '入力欄も白基調（color-scheme: light）');
+  const card = await page.evaluate(()=>{ const c=document.querySelector('#view .card'); return c? getComputedStyle(c).backgroundColor : ''; });
+  ok(card==='rgb(255, 255, 255)', 'カードは白（'+card+'）');
+  const html = await page.content();
+  ok(!/prefers-color-scheme/.test(html), '暗いテーマの指定そのものが残っていない');
+  await ctx.close();
+}
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);
