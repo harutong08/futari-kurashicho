@@ -527,6 +527,25 @@ await run('自動更新', {files:{settings:null, expenses:null, chat:null, todos
   await ctx.close();
 }
 
+// 24) 検索に出ないようにしてある
+{
+  const ctx = await browser.newContext();
+  const page = await ctx.newPage();
+  await page.route('https://api.github.com/**', r=>r.fulfill({status:404, headers:CORS, body:'{}'}));
+  await page.goto(url); await page.waitForTimeout(400);
+  console.log('\n[検索よけ]');
+  const robots = await page.evaluate(()=>{
+    const m=document.querySelector('meta[name="robots"]'); return m? m.content : '';
+  });
+  ok(/noindex/.test(robots), 'ページに noindex が付いている（'+robots+'）');
+  ok(/nofollow/.test(robots), 'リンクもたどらせない');
+  const res = await page.request.get(url+'robots.txt');
+  ok(res.status()===200, 'robots.txt が配られている');
+  const body = await res.text();
+  ok(/User-agent:\s*\*/.test(body) && /Disallow:\s*\//.test(body), 'robots.txt で全部を対象外にしている');
+  await ctx.close();
+}
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);
