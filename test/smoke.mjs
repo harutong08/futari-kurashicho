@@ -546,6 +546,30 @@ await run('自動更新', {files:{settings:null, expenses:null, chat:null, todos
   await ctx.close();
 }
 
+// 25) 初期費用のメモ
+await run('初期費用のメモ', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{puts})=>{
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
+  ok(await page.locator('.item.chk .memo').count()===0, '最初はメモ欄が出ていない');
+  ok(await page.locator('[data-act="toggleNote"]').count()>0, '項目ごとにメモのボタンがある');
+  await page.locator('[data-act="toggleNote"]').first().click(); await page.waitForTimeout(300);
+  ok(await page.locator('.item.chk .memo').count()===1, '押すとメモ欄が開く');
+  const box = page.locator('.item.chk .memo .in').first();
+  await box.fill('A不動産は1か月、B社は2か月');
+  await box.blur(); await page.waitForTimeout(2200);
+  const st = puts.filter(p=>p.key==='settings').pop();
+  ok(st && st.data.initial.some(x=>x.note==='A不動産は1か月、B社は2か月'), 'メモがGitHubに保存される');
+  // 書いたメモは、開き直しても出たまま
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
+  ok((await page.inputValue('.item.chk .memo .in'))==='A不動産は1か月、B社は2か月', 'タブを移っても残る');
+  ok(await page.locator('[data-act="toggleNote"].on').count()>=1, 'メモがある項目は印が付く');
+  // 空にすると閉じられる
+  await page.locator('.item.chk .memo .in').first().fill('');
+  await page.locator('.item.chk .memo .in').first().blur(); await page.waitForTimeout(600);
+  await page.locator('[data-act="toggleNote"]').first().click(); await page.waitForTimeout(300);
+  ok(await page.locator('.item.chk .memo').count()===0, 'もう一度押すと閉じる');
+});
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);

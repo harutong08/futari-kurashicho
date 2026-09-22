@@ -135,13 +135,19 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .ghead h3 i{width:10px;height:10px;border-radius:3px}
 .ghead .num{font-weight:600;color:var(--muted);font-size:14px}
 .item{display:grid;grid-template-columns:1fr 140px 30px;gap:8px;align-items:center;padding-block:4px}
-.item.chk{grid-template-columns:22px 1fr 140px 30px}
+.item.chk{grid-template-columns:22px 1fr 140px 30px 30px}
 .item.chk input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .item .in{padding:6px 8px;font-size:14px}
 .item.off .lbl,.item.off .yen{color:var(--faint);text-decoration:line-through}
 .hint{font-size:12px;color:var(--faint);grid-column:1/-1;margin:-4px 0 2px}
 .item.chk .hint{grid-column:2/-1}
-@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}.item.chk{grid-template-columns:22px 1fr 108px 30px}}
+/* 項目ごとのメモ。見積もりの比較や「母からもらう」などを書ける */
+.item .memo{grid-column:2/-1;display:flex;gap:8px;align-items:center;margin:2px 0 6px}
+.item .memo .in{padding:6px 10px;font-size:13px}
+.icon.memobtn:hover{background:var(--accent-soft);color:var(--accent)}
+.icon.memobtn.on{color:var(--accent)}
+.item.off .memo{opacity:.5}
+@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}.item.chk{grid-template-columns:22px 1fr 108px 30px 30px}}
 
 /* table */
 .tablewrap{overflow-x:auto}
@@ -370,6 +376,7 @@ let chat = [];
 let todos = [];
 let tab = "home";
 let editBudget = false;
+let openNotes = new Set();   /* メモ欄を開いている初期費用の項目 */
 let month = todayStr().slice(0,7);
 
 function normalize(d){
@@ -445,7 +452,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-22b";
+const APP_VERSION = "2026-09-22c";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1438,8 +1445,14 @@ function viewInitial(){
       <input type="checkbox" id="off-${esc(x.id)}" data-f="initial.${idx}.off" data-bool ${x.off?"checked":""} aria-label="${esc(x.label)}を用意済み・不要にする" title="用意済み・不要ならチェック">
       <input class="in lbl" id="il-${esc(x.id)}" data-f="initial.${idx}.label" value="${esc(x.label)}" aria-label="項目名">
       ${yenInput("initial."+idx+".amt", iAmt(x), `data-clear-m="${idx}" aria-label="${esc(x.label)}の金額"`)}
+      <button class="icon memobtn ${x.note||openNotes.has(x.id)?"on":""}" data-act="toggleNote" data-id="${esc(x.id)}"
+        aria-label="${esc(x.label)}のメモ" title="メモ" aria-pressed="${!!(x.note||openNotes.has(x.id))}">✎</button>
       <button class="icon" data-act="delInit" data-i="${idx}" aria-label="${esc(x.label)}を削除">×</button>
       ${x.m!=null?`<div class="hint">家賃 × ${x.m}か月分で自動計算</div>`:""}
+      ${(x.note||openNotes.has(x.id))? `<div class="memo">
+        <input class="in" id="nt-${esc(x.id)}" data-f="initial.${idx}.note" value="${esc(x.note||"")}"
+          maxlength="120" placeholder="メモ（例：A不動産は1か月、B社は2か月）" aria-label="${esc(x.label)}のメモ">
+      </div>` : ""}
     </div>`).join("")}
     <button class="btn ghost small" data-act="addInit" data-g="${g.k}">＋ 項目を追加</button></div>`; }).join("");
 
@@ -1744,6 +1757,12 @@ document.addEventListener("click", async e=>{
   if (act==="addBud"){ S.budget.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0}); commit(); }
   if (act==="delBud"){ S.budget.splice(+t.dataset.i,1); commit(); }
   if (act==="addInit"){ S.initial.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0,off:false}); commit(); }
+  if (act==="toggleNote"){
+    const id=t.dataset.id;
+    if (openNotes.has(id)) openNotes.delete(id); else openNotes.add(id);
+    render();
+    const el=$("#nt-"+CSS.escape(id)); if(el) el.focus();
+    return; }
   if (act==="delInit"){ S.initial.splice(+t.dataset.i,1); commit(); }
   if (act==="resetBudget"){ if(confirm("毎月の予算を目安の金額に戻しますか？（収入や家計簿はそのままです）")){ S.budget=clone(DEFAULT.budget); const a=areaOf(S.area); const g=S.budget.find(b=>b.id==="gas"); g.amt=a.gas; g.label=a.gasLabel; S.budget.find(b=>b.id==="park").amt=a.park; commit(); toast("目安の金額に戻しました"); } }
   if (act==="delExp"){ const id=t.dataset.id;
