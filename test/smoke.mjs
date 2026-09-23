@@ -662,6 +662,36 @@ await run('優先順位の色', {files:{settings:null, expenses:null, chat:null,
   ok(b.filter(x=>x.pri==='pri1').length===5, '赤はいつも5件');
 });
 
+// 29) 長い項目名が見切れない
+await run('長い名前が全部見える', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page)=>{
+  const LONG = '敷金（保証金）※B不動産は家賃2か月分、C社は1か月分。退去時の原状回復費を差し引いて返金される分と、ハウスクリーニング代の扱いを契約前に必ず確認すること';
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  const box = page.locator('.item.chk .lbl').first();
+  await box.scrollIntoViewIfNeeded();
+  const one = await box.evaluate(el=>el.clientHeight);
+  await box.fill(LONG);
+  await page.waitForTimeout(250);
+  const m = await box.evaluate(el=>({
+    clipped: el.scrollHeight > el.clientHeight + 2,
+    h: el.clientHeight,
+    value: el.value,
+    tag: el.tagName
+  }));
+  ok(m.tag==='TEXTAREA', '名前の欄は折り返す欄になっている');
+  ok(!m.clipped, '文字が隠れていない（はみ出しなし）');
+  ok(m.h > one, '行が増えたぶん高さが伸びる（'+one+'→'+m.h+'）');
+  ok(m.value===LONG, '入力した文字がそのまま入っている');
+  // 保存して開き直しても、折り返したまま全部見える
+  await box.blur(); await page.waitForTimeout(1200);
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(400);
+  const again = await page.locator('.item.chk .lbl').first().evaluate(el=>({
+    clipped: el.scrollHeight > el.clientHeight + 2, h: el.clientHeight, v: el.value }));
+  ok(again.v===LONG && !again.clipped && again.h>one, '描き直したあとも全部見える');
+  // 金額の欄は押し出されずに残っている
+  ok(await page.locator('.item.chk').first().locator('.yen').isVisible(), '金額の欄はそのまま');
+});
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);

@@ -138,6 +138,10 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .item.chk{grid-template-columns:20px 22px 1fr 140px 30px 30px}
 .item.chk input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .item .in{padding:6px 8px;font-size:14px}
+/* 名前は長くても全部見えるように折り返す。高さは中身に合わせて伸ばす（autoGrow） */
+.item textarea.lbl{resize:none;overflow:hidden;line-height:1.5;min-height:32px;white-space:pre-wrap;
+  word-break:break-word;font-family:var(--f-body);display:block}
+.item.chk{align-items:center}
 .item.off .lbl,.item.off .yen{color:var(--faint);text-decoration:line-through}
 .hint{font-size:12px;color:var(--faint);grid-column:1/-1;margin:-4px 0 2px}
 .item.chk .hint{grid-column:3/-1}
@@ -167,7 +171,19 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .item.chk.dragging .in{background:var(--surface)}
 body.dragbusy{overflow:hidden;user-select:none;-webkit-user-select:none}
 body.dragbusy .item.chk{transition:transform .12s}
-@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}.item.chk{grid-template-columns:18px 20px 1fr 96px 28px 28px}}
+@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}}
+/* 狭い画面では、名前が細長い柱にならないように横並びをやめる。
+   1行目＝つまみ・チェック・名前、2行目＝金額とボタン */
+@media (max-width:560px){
+  .item.chk{display:flex;flex-wrap:wrap;align-items:center;gap:8px}
+  .item.chk .grip{flex:0 0 14px}
+  .item.chk>input[type=checkbox]{flex:0 0 20px}
+  .item.chk .lbl{flex:1 1 140px;min-width:0}
+  .item.chk .yenwrap{flex:1 1 110px;margin-left:34px}
+  .item.chk .icon{flex:0 0 28px}
+  .item.chk .hint,.item.chk .memo{flex:1 1 100%;margin-left:34px}
+  .item.chk .by{display:none}
+}
 
 /* table */
 .tablewrap{overflow-x:auto}
@@ -472,7 +488,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-23b";
+const APP_VERSION = "2026-09-23c";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1480,7 +1496,7 @@ function viewInitial(){
     ${items.map(([x,idx])=>`<div class="item chk ${x.off?"off":""} ${priOf(x)}" data-idx="${idx}" data-g="${esc(g.k)}">
       <span class="grip" data-grip aria-label="長押しして並べ替え" title="長押し（またはつまんで）並べ替え">⠿</span>
       <input type="checkbox" id="off-${esc(x.id)}" data-f="initial.${idx}.off" data-bool ${x.off?"checked":""} aria-label="${esc(x.label)}を用意済み・不要にする" title="用意済み・不要ならチェック">
-      <input class="in lbl" id="il-${esc(x.id)}" data-f="initial.${idx}.label" value="${esc(x.label)}" aria-label="項目名">
+      <textarea class="in lbl" id="il-${esc(x.id)}" data-f="initial.${idx}.label" rows="1" maxlength="80" aria-label="項目名">${esc(x.label)}</textarea>
       ${yenInput("initial."+idx+".amt", iAmt(x), `data-clear-m="${idx}" aria-label="${esc(x.label)}の金額"`)}
       <button class="icon memobtn ${x.note||openNotes.has(x.id)?"on":""}" data-act="toggleNote" data-id="${esc(x.id)}"
         aria-label="${esc(x.label)}のメモ" title="メモ" aria-pressed="${!!(x.note||openNotes.has(x.id))}">✎</button>
@@ -1591,7 +1607,7 @@ function viewBudget(){
   const groups = GROUPS.map(g=>{ const items=S.budget.map((b,idx)=>[b,idx]).filter(([b])=>b.g===g.k);
     return `<div class="group"><div class="ghead"><h3><i style="background:var(--c-${g.k})"></i>${g.label}</h3><span class="num">${yen(groupSum(g.k))}</span></div>
     ${items.map(([b,idx])=>`<div class="item">
-      <input class="in lbl" id="bl-${esc(b.id)}" data-f="budget.${idx}.label" value="${esc(b.label)}" aria-label="項目名">
+      <textarea class="in lbl" id="bl-${esc(b.id)}" data-f="budget.${idx}.label" rows="1" maxlength="80" aria-label="項目名">${esc(b.label)}</textarea>
       ${yenInput("budget."+idx+".amt", b.amt, `aria-label="${esc(b.label)}の金額"`)}
       <button class="icon" data-act="delBud" data-i="${idx}" aria-label="${esc(b.label)}を削除">×</button></div>`).join("")}
     <button class="btn ghost small" data-act="addBud" data-g="${g.k}">＋ 項目を追加</button></div>`; }).join("");
@@ -1768,6 +1784,7 @@ function render(){
     const w=$("#chatwrap"); if(w) w.scrollTop=w.scrollHeight;
     markChatSeen();
   }
+  growAll();
 }
 
 /* ===== 長押しで並べ替え（初期費用） =====
@@ -1846,6 +1863,14 @@ document.addEventListener("touchmove", e=>{ if(drag && e.cancelable) e.preventDe
 function setPath(path, val){
   const ks=path.split("."); let o=S; for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=val;
 }
+/* 折り返しで増えた行の分だけ高さを広げる */
+function autoGrow(el){
+  if (!el) return;
+  el.style.height="auto";
+  el.style.height=(el.scrollHeight+2)+"px";
+}
+function growAll(){ document.querySelectorAll("textarea.lbl").forEach(autoGrow); }
+
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1800); }
 function commit(fast){ scheduleSave(fast); render(); }
 function addTodo(text, due){
@@ -1960,10 +1985,13 @@ document.addEventListener("click", async e=>{
 });
 
 document.addEventListener("keydown", e=>{
-  const el=e.target; if(e.key==="Enter" && el.dataset && (el.dataset.f||el.dataset.ov) && el.tagName==="INPUT"){ e.preventDefault(); el.blur(); }
+  const el=e.target;
+  if (e.key==="Enter" && el.dataset && (el.dataset.f||el.dataset.ov) && (el.tagName==="INPUT" || el.classList.contains("lbl"))){ e.preventDefault(); el.blur(); }
 });
 document.addEventListener("input", e=>{
-  const el=e.target; if(el.type==="range" && el.dataset.f){ setPath(el.dataset.f, +el.value); const o=document.getElementById(el.dataset.out); if(o) o.textContent=yen(+el.value); }
+  const el=e.target;
+  if (el.tagName==="TEXTAREA" && el.classList.contains("lbl")) autoGrow(el);
+  if(el.type==="range" && el.dataset.f){ setPath(el.dataset.f, +el.value); const o=document.getElementById(el.dataset.out); if(o) o.textContent=yen(+el.value); }
 });
 document.addEventListener("change", e=>{
   const el=e.target;
