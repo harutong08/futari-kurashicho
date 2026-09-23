@@ -135,19 +135,29 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .ghead h3 i{width:10px;height:10px;border-radius:3px}
 .ghead .num{font-weight:600;color:var(--muted);font-size:14px}
 .item{display:grid;grid-template-columns:1fr 140px 30px;gap:8px;align-items:center;padding-block:4px}
-.item.chk{grid-template-columns:22px 1fr 140px 30px 30px}
+.item.chk{grid-template-columns:20px 22px 1fr 140px 30px 30px}
 .item.chk input[type=checkbox]{width:18px;height:18px;accent-color:var(--accent)}
 .item .in{padding:6px 8px;font-size:14px}
 .item.off .lbl,.item.off .yen{color:var(--faint);text-decoration:line-through}
 .hint{font-size:12px;color:var(--faint);grid-column:1/-1;margin:-4px 0 2px}
-.item.chk .hint{grid-column:2/-1}
+.item.chk .hint{grid-column:3/-1}
 /* 項目ごとのメモ。見積もりの比較や「母からもらう」などを書ける */
-.item .memo{grid-column:2/-1;display:flex;gap:8px;align-items:center;margin:2px 0 6px}
+.item .memo{grid-column:3/-1;display:flex;gap:8px;align-items:center;margin:2px 0 6px}
 .item .memo .in{padding:6px 10px;font-size:13px}
 .icon.memobtn:hover{background:var(--accent-soft);color:var(--accent)}
 .icon.memobtn.on{color:var(--accent)}
 .item.off .memo{opacity:.5}
-@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}.item.chk{grid-template-columns:22px 1fr 108px 30px 30px}}
+/* 長押しで並べ替え */
+.item.chk[data-idx]{border-radius:10px}
+.grip{color:var(--faint);font-size:15px;line-height:1;cursor:grab;touch-action:none;text-align:center;
+  user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+.grip:hover{color:var(--accent)}
+.item.chk.dragging .grip{cursor:grabbing;color:var(--accent)}
+.item.chk.dragging{background:var(--accent-soft);box-shadow:var(--shadow);position:relative;z-index:2;touch-action:none}
+.item.chk.dragging .in{background:var(--surface)}
+body.dragbusy{overflow:hidden;user-select:none;-webkit-user-select:none}
+body.dragbusy .item.chk{transition:transform .12s}
+@media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}.item.chk{grid-template-columns:18px 20px 1fr 96px 28px 28px}}
 
 /* table */
 .tablewrap{overflow-x:auto}
@@ -452,7 +462,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-22c";
+const APP_VERSION = "2026-09-23a";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -461,6 +471,7 @@ let token = "";
 let mode = "local";          /* local（この端末だけ）/ readonly（見るだけ）/ github（2人で同期） */
 let pending = null;          /* 入力中に届いたリモートの設定 */
 let localDirty = false;      /* 見るだけの状態で編集してしまった */
+let settingsDirty = false;   /* この端末の設定変更が、まだGitHubに届いていない */
 let saveTimer = null, expTimer = null, pollTimer = null;
 let busy = 0, lastErr = "";
 let sha = { settings:null, expenses:null, chat:null, todos:null };
@@ -647,11 +658,14 @@ function loadLocal(){
   try{ chatSeen=+(localStorage.getItem(SEEN_KEY)||0)||0; }catch(e){}
 }
 
-function scheduleSave(){
+/* fast=true は項目の追加・削除など、形が変わる操作。すぐ送る。
+   文字を打っているときは、打鍵のたびに送らないよう少し待つ。 */
+function scheduleSave(fast){
+  settingsDirty = true;
   saveLocalSettings();
   if (mode!=="github"){ if(mode==="readonly") markDirty(); return; }
   clearTimeout(saveTimer);
-  saveTimer=setTimeout(pushSettings, 1500);
+  saveTimer=setTimeout(pushSettings, fast? 250 : 900);
 }
 function saveExpensesSoon(){
   saveLocalExpenses();
@@ -669,7 +683,10 @@ async function pushSettings(){
     for (let i=0;i<3;i++){
       const r=await ghPut("settings", await seal(data), sha.settings, "家計：設定を更新");
       if (r.conflict){ const g=await ghGet("settings"); sha.settings=g.sha; continue; }
-      sha.settings=r.sha; pushed.settings=json; lastErr=""; break;
+      sha.settings=r.sha; pushed.settings=json; lastErr="";
+      /* 送っている間にまた触っていたら、もう一度送る。そうでなければ未送信フラグを下ろす */
+      if (JSON.stringify(S)===json) settingsDirty=false; else scheduleSave(true);
+      break;
     }
   }catch(e){ lastErr=e.message; toast("保存できませんでした："+e.message); }
   busy--; setSync();
@@ -819,7 +836,10 @@ async function pushExpenses(){
 function adoptSettings(data){
   const inc=normalize(clone(data));
   const json=JSON.stringify(inc);
-  if (json===JSON.stringify(S)){ pushed.settings=json; return false; }
+  if (json===JSON.stringify(S)){ pushed.settings=json; settingsDirty=false; return false; }
+  /* まだ送れていない変更があるうちに相手の内容を当てると、足したばかりの項目が消える。
+     こちらを優先して送り直す（設定は後から保存した側が残る決まり）。 */
+  if (settingsDirty){ scheduleSave(true); return false; }
   if (editing()){ pending=inc; return false; }
   S=inc; pushed.settings=json; saveLocalSettings(); return true;
 }
@@ -864,7 +884,7 @@ async function rekeyAll(){
 }
 
 async function pull(){
-  if (mode==="local" || localDirty || busy) return;
+  if (mode==="local" || localDirty || busy || drag) return;
   try{
     const [gs,ge,gc,gt]=await Promise.all([ghGet("settings"), ghGet("expenses"), ghGet("chat"), ghGet("todos")]);
     lastErr="";
@@ -1441,7 +1461,8 @@ function viewInitial(){
   const groups = IGROUPS.map(g=>{ const items=S.initial.map((x,idx)=>[x,idx]).filter(([x])=>x.g===g.k);
     const sum=items.filter(([x])=>!x.off).reduce((a,[x])=>a+iAmt(x),0);
     return `<div class="group"><div class="ghead"><h3>${g.label}</h3><span class="num">${yen(sum)}</span></div>
-    ${items.map(([x,idx])=>`<div class="item chk ${x.off?"off":""}">
+    ${items.map(([x,idx])=>`<div class="item chk ${x.off?"off":""}" data-idx="${idx}" data-g="${esc(g.k)}">
+      <span class="grip" data-grip aria-label="長押しして並べ替え" title="長押し（またはつまんで）並べ替え">⠿</span>
       <input type="checkbox" id="off-${esc(x.id)}" data-f="initial.${idx}.off" data-bool ${x.off?"checked":""} aria-label="${esc(x.label)}を用意済み・不要にする" title="用意済み・不要ならチェック">
       <input class="in lbl" id="il-${esc(x.id)}" data-f="initial.${idx}.label" value="${esc(x.label)}" aria-label="項目名">
       ${yenInput("initial."+idx+".amt", iAmt(x), `data-clear-m="${idx}" aria-label="${esc(x.label)}の金額"`)}
@@ -1504,7 +1525,9 @@ function viewInitial(){
   ${scheduleCard(p)}
 
   <section class="card s12"><h2>初期費用のチェックリスト</h2>
-    <p class="sub">松本・塩尻・安曇野の賃貸でよくある条件で試算。物件が決まったら見積もりの金額に書き換えてください</p>
+    <p class="sub">松本・塩尻・安曇野の賃貸でよくある条件で試算。物件が決まったら見積もりの金額に書き換えてください。
+      <b>左の ⠿ をつまむか、行を長押しして上下に動かすと並べ替えられます</b>（同じまとまりの中で。優先順位を上から並べる用）。
+      鉛筆のボタンでメモも書けます</p>
     <div class="stack">${groups}</div>
   </section>
   </div>`;
@@ -1707,6 +1730,7 @@ function viewChat(){
 }
 
 function render(){
+  if (drag) return;   /* 並べ替えの最中は描き直さない */
   $("#nameA").textContent=S.names[0]; $("#nameB").textContent=S.names[1];
   $("#dotA").textContent=(S.names[0]||"A").slice(0,1); $("#dotB").textContent=(S.names[1]||"B").slice(0,1);
   document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-selected", b.dataset.tab===tab));
@@ -1724,12 +1748,84 @@ function render(){
   }
 }
 
+/* ===== 長押しで並べ替え（初期費用） =====
+   同じまとまりの中だけで動かせる。優先順位を上から並べるための機能。
+   文字入力やボタンの上から始まったときは並べ替えにしない。 */
+let drag=null, pressTimer=null, pressX=0, pressY=0;
+const PRESS_MS=420, PRESS_SLOP=8;
+
+function rowsOf(g){ return [...document.querySelectorAll('.item.chk[data-g="'+CSS.escape(g)+'"]')]; }
+function clearPress(){ clearTimeout(pressTimer); pressTimer=null; }
+
+function startDrag(el, pointerId){
+  pressTimer=null;
+  drag={el, g:el.dataset.g};
+  el.classList.add("dragging");
+  document.body.classList.add("dragbusy");
+  try{ el.setPointerCapture(pointerId); }catch(e){}
+  try{ if(navigator.vibrate) navigator.vibrate(12); }catch(e){}
+}
+function endDrag(){
+  if (!drag) return;
+  const {el,g}=drag;
+  el.classList.remove("dragging");
+  document.body.classList.remove("dragbusy");
+  const order=rowsOf(g).map(r=>+r.dataset.idx);
+  drag=null;
+  applyInitialOrder(g, order);
+}
+function applyInitialOrder(g, order){
+  const slots=[]; S.initial.forEach((x,i)=>{ if(x.g===g) slots.push(i); });
+  if (slots.length!==order.length || order.some(i=>!S.initial[i])){ render(); return; }
+  const objs=order.map(i=>S.initial[i]);
+  const same=slots.every((pos,k)=>S.initial[pos]===objs[k]);
+  slots.forEach((pos,k)=>{ S.initial[pos]=objs[k]; });
+  if (same){ render(); return; }
+  commit(true);
+  toast("並べ替えました");
+}
+
+document.addEventListener("pointerdown", e=>{
+  if (e.pointerType==="mouse" && e.button!==0) return;
+  const el=e.target.closest(".item.chk[data-idx]");
+  if (!el || !canWrite()) return;
+  /* つまみ（⠿）からは、すぐつかめる */
+  if (e.target.closest("[data-grip]")){
+    if (e.cancelable) e.preventDefault();
+    startDrag(el, e.pointerId);
+    return;
+  }
+  /* 行の余白からは長押しで。文字入力やボタンの上からは始めない */
+  if (e.target.closest("input,button,select,textarea,label")) return;
+  pressX=e.clientX; pressY=e.clientY;
+  clearTimeout(pressTimer);
+  const id=e.pointerId;
+  pressTimer=setTimeout(()=>startDrag(el, id), PRESS_MS);
+});
+document.addEventListener("pointermove", e=>{
+  if (pressTimer && (Math.abs(e.clientX-pressX)>PRESS_SLOP || Math.abs(e.clientY-pressY)>PRESS_SLOP)) clearPress();
+  if (!drag) return;
+  if (e.cancelable) e.preventDefault();
+  const y=e.clientY;
+  for (const r of rowsOf(drag.g)){
+    if (r===drag.el) continue;
+    const b=r.getBoundingClientRect(), mid=b.top+b.height/2;
+    const after=!!(r.compareDocumentPosition(drag.el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (y<mid && after){ r.parentNode.insertBefore(drag.el, r); break; }
+    if (y>mid && !after){ r.parentNode.insertBefore(drag.el, r.nextSibling); break; }
+  }
+}, {passive:false});
+document.addEventListener("pointerup", ()=>{ clearPress(); endDrag(); });
+document.addEventListener("pointercancel", ()=>{ clearPress(); endDrag(); });
+/* 動かしている間は画面がスクロールしないようにする */
+document.addEventListener("touchmove", e=>{ if(drag && e.cancelable) e.preventDefault(); }, {passive:false});
+
 /* ---------- 操作 ---------- */
 function setPath(path, val){
   const ks=path.split("."); let o=S; for(let i=0;i<ks.length-1;i++) o=o[ks[i]]; o[ks[ks.length-1]]=val;
 }
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.classList.add("show"); clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove("show"),1800); }
-function commit(){ scheduleSave(); render(); }
+function commit(fast){ scheduleSave(fast); render(); }
 function addTodo(text, due){
   text=String(text||"").trim();
   if (!text) return false;
@@ -1750,20 +1846,20 @@ document.addEventListener("click", async e=>{
     const g=S.budget.find(b=>b.id==="gas"); if(g){g.amt=a.gas; g.label=a.gasLabel;}
     const p=S.budget.find(b=>b.id==="park"); if(p) p.amt=a.park; commit(); toast(a.label+"の目安にしました"); }
   if (act==="toggleEdit"){ editBudget=!editBudget; render(); if(editBudget){ const q=$("#quickEdit"); if(q) q.scrollIntoView({behavior:"smooth",block:"start"}); } return; }
-  if (act==="addBonus"){ S.savings.bonuses.push({id:uid(),label:"ボーナス",m:7,amt:[0,0]}); commit(); }
-  if (act==="delBonus"){ S.savings.bonuses.splice(+t.dataset.i,1); commit(); }
+  if (act==="addBonus"){ S.savings.bonuses.push({id:uid(),label:"ボーナス",m:7,amt:[0,0]}); commit(true); }
+  if (act==="delBonus"){ S.savings.bonuses.splice(+t.dataset.i,1); commit(true); }
   if (act==="resetOv"){ delete S.savings.overrides[t.dataset.ym]; commit(); }
   if (act==="resetAllOv"){ if(confirm("月ごとに変更した貯金額を、すべてふだんの額に戻しますか？")){ S.savings.overrides={}; commit(); toast("ふだんの額に戻しました"); } }
-  if (act==="addBud"){ S.budget.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0}); commit(); }
-  if (act==="delBud"){ S.budget.splice(+t.dataset.i,1); commit(); }
-  if (act==="addInit"){ S.initial.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0,off:false}); commit(); }
+  if (act==="addBud"){ S.budget.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0}); commit(true); }
+  if (act==="delBud"){ S.budget.splice(+t.dataset.i,1); commit(true); }
+  if (act==="addInit"){ S.initial.push({id:uid(),g:t.dataset.g,label:"新しい項目",amt:0,off:false}); commit(true); }
   if (act==="toggleNote"){
     const id=t.dataset.id;
     if (openNotes.has(id)) openNotes.delete(id); else openNotes.add(id);
     render();
     const el=$("#nt-"+CSS.escape(id)); if(el) el.focus();
     return; }
-  if (act==="delInit"){ S.initial.splice(+t.dataset.i,1); commit(); }
+  if (act==="delInit"){ S.initial.splice(+t.dataset.i,1); commit(true); }
   if (act==="resetBudget"){ if(confirm("毎月の予算を目安の金額に戻しますか？（収入や家計簿はそのままです）")){ S.budget=clone(DEFAULT.budget); const a=areaOf(S.area); const g=S.budget.find(b=>b.id==="gas"); g.amt=a.gas; g.label=a.gasLabel; S.budget.find(b=>b.id==="park").amt=a.park; commit(); toast("目安の金額に戻しました"); } }
   if (act==="delExp"){ const id=t.dataset.id;
     if (!canWrite()){ nudge(); return; }
@@ -1878,7 +1974,11 @@ document.addEventListener("change", e=>{
     window.scrollTo({top:y});
   },0);
 });
-document.addEventListener("focusout", ()=>{ setTimeout(()=>{ if(pending && !editing()){ S=pending; pending=null; render(); } }, 60); });
+document.addEventListener("focusout", ()=>{ setTimeout(()=>{
+  if (!pending || editing()) return;
+  if (settingsDirty){ pending=null; return; }   /* 自分の変更が未送信なら、相手の内容は当てない */
+  S=pending; pending=null; render();
+}, 60); });
 
 document.addEventListener("submit", async e=>{
   if (e.target.id==="lockForm"){

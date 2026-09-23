@@ -570,6 +570,74 @@ await run('初期費用のメモ', {files:{settings:null, expenses:null, chat:nu
   ok(await page.locator('.item.chk .memo').count()===0, 'もう一度押すと閉じる');
 });
 
+// 26) 長押しで並べ替え
+await run('初期費用の並べ替え', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{puts})=>{
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  const names = async () => page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="contract"] .lbl')].map(i=>i.value));
+  const before = await names();
+  ok(before[0]==='敷金（保証金）' && before[1]==='礼金', '最初の並びを確認');
+  const rows = page.locator('.item.chk[data-g="contract"]');
+  await rows.nth(0).scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
+  const grip = await rows.nth(0).locator('[data-grip]').boundingBox();
+  const c = await rows.nth(2).boundingBox();
+  await page.mouse.move(grip.x + grip.width/2, grip.y + grip.height/2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width/2, c.y + c.height/2 + 6, {steps:8});
+  await page.waitForTimeout(150);
+  await page.mouse.up();
+  await page.waitForTimeout(900);
+  const after = await names();
+  ok(after[0]!=='敷金（保証金）', 'つまんで動かすと順番が変わる');
+  ok(after.indexOf('敷金（保証金）')>0, '下に移った');
+  ok(after.length===before.length, '件数は変わらない');
+  ok(after.slice().sort().join()===before.slice().sort().join(), '中身は失われない');
+  const st = puts.filter(p=>p.key==='settings').pop();
+  ok(st && st.data.initial.filter(x=>x.g==='contract').map(x=>x.label).join()===after.join(), '並びがGitHubに保存される');
+  // 短く押しただけでは動かない
+  await page.locator('.item.chk[data-g="move"]').first().scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
+  const b2 = await page.locator('.item.chk[data-g="move"]').first().boundingBox();
+  const before2 = await page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="move"] .lbl')].map(i=>i.value));
+  await page.mouse.move(b2.x + b2.width - 60, b2.y + b2.height/2);
+  await page.mouse.down(); await page.waitForTimeout(80);
+  await page.mouse.move(b2.x + b2.width - 60, b2.y + b2.height/2 + 80, {steps:5});
+  await page.mouse.up(); await page.waitForTimeout(400);
+  const after2 = await page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="move"] .lbl')].map(i=>i.value));
+  ok(after2.join()===before2.join(), '短く押して動かしただけでは並べ替えない（画面スクロールを邪魔しない）');
+  // 行の余白を長押ししても動く
+  const r3 = page.locator('.item.chk[data-g="furniture"]');
+  await r3.nth(0).scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
+  const before3 = await page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="furniture"] .lbl')].map(i=>i.value));
+  const f0 = await r3.nth(0).boundingBox(), f2 = await r3.nth(2).boundingBox();
+  await page.mouse.move(f0.x + 30, f0.y + f0.height/2);
+  await page.mouse.down();
+  await page.waitForTimeout(600);
+  await page.mouse.move(f0.x + 30, f2.y + f2.height/2 + 6, {steps:8});
+  await page.waitForTimeout(150);
+  await page.mouse.up(); await page.waitForTimeout(800);
+  const after3 = await page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="furniture"] .lbl')].map(i=>i.value));
+  ok(after3[0]!==before3[0], '行を長押ししても並べ替えられる');
+  ok(after3.slice().sort().join()===before3.slice().sort().join(), '中身は失われない');
+});
+
+// 27) 足したばかりの欄が、相手の読み込みで消えない
+await run('追加が消えない', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{files})=>{
+  await page.waitForTimeout(500);
+  // GitHub側には「追加前」の内容が入っている状態を作る
+  const base = JSON.parse(JSON.stringify(files.settings));
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
+  const n0 = await page.locator('.item.chk[data-g="move"]').count();
+  // 追加した直後に、相手の読み込みを起こす
+  await page.click('[data-act="addInit"][data-g="move"]');
+  files.settings = base;                      // 相手側は古いまま
+  await page.evaluate(()=>document.dispatchEvent(new Event('visibilitychange')));
+  await page.waitForTimeout(1800);
+  const n1 = await page.locator('.item.chk[data-g="move"]').count();
+  ok(n1===n0+1, '追加した欄が残っている（'+n0+'→'+n1+'）');
+  ok((await page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="move"] .lbl')].map(i=>i.value))).includes('新しい項目'), '中身も残っている');
+  await page.waitForTimeout(1200);
+  ok(files.settings.initial.filter(x=>x.g==='move').length===n0+1, 'GitHub側にも届いている');
+});
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);
