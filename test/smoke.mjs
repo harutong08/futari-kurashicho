@@ -553,7 +553,7 @@ await run('初期費用のメモ', {files:{settings:null, expenses:null, chat:nu
   ok(await page.locator('[data-act="toggleNote"]').count()>0, '項目ごとにメモのボタンがある');
   await page.locator('[data-act="toggleNote"]').first().click(); await page.waitForTimeout(300);
   ok(await page.locator('.item.chk .memo').count()===1, '押すとメモ欄が開く');
-  const box = page.locator('.item.chk .memo .in').first();
+  const box = page.locator('.item.chk .memo input[id^="nt-"]').first();
   await box.fill('A不動産は1か月、B社は2か月');
   await box.blur(); await page.waitForTimeout(2200);
   const st = puts.filter(p=>p.key==='settings').pop();
@@ -561,11 +561,11 @@ await run('初期費用のメモ', {files:{settings:null, expenses:null, chat:nu
   // 書いたメモは、開き直しても出たまま
   await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
   await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
-  ok((await page.inputValue('.item.chk .memo .in'))==='A不動産は1か月、B社は2か月', 'タブを移っても残る');
+  ok((await page.inputValue('.item.chk .memo input[id^="nt-"]'))==='A不動産は1か月、B社は2か月', 'タブを移っても残る');
   ok(await page.locator('[data-act="toggleNote"].on').count()>=1, 'メモがある項目は印が付く');
   // 空にすると閉じられる
-  await page.locator('.item.chk .memo .in').first().fill('');
-  await page.locator('.item.chk .memo .in').first().blur(); await page.waitForTimeout(600);
+  await page.locator('.item.chk .memo input[id^="nt-"]').first().fill('');
+  await page.locator('.item.chk .memo input[id^="nt-"]').first().blur(); await page.waitForTimeout(600);
   await page.locator('[data-act="toggleNote"]').first().click(); await page.waitForTimeout(300);
   ok(await page.locator('.item.chk .memo').count()===0, 'もう一度押すと閉じる');
 });
@@ -690,6 +690,33 @@ await run('長い名前が全部見える', {files:{settings:null, expenses:null
   ok(again.v===LONG && !again.clipped && again.h>one, '描き直したあとも全部見える');
   // 金額の欄は押し出されずに残っている
   ok(await page.locator('.item.chk').first().locator('.yen').isVisible(), '金額の欄はそのまま');
+});
+
+// 30) 商品ページへのリンク
+await run('項目のリンク', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page,{puts})=>{
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  // 家具・家電の1件目（冷蔵庫）にリンクを入れる
+  const row = page.locator('.item.chk[data-g="furniture"]').first();
+  await row.scrollIntoViewIfNeeded();
+  ok(await row.locator('a.linkbtn').count()===0, 'リンクが無いうちは ↗ が出ない');
+  await row.locator('[data-act="toggleNote"]').click(); await page.waitForTimeout(300);
+  const url = 'https://www.amazon.co.jp/dp/B0EXAMPLE?th=1';
+  await row.locator('input[type=url]').fill(url);
+  await row.locator('input[type=url]').blur(); await page.waitForTimeout(900);
+  const a = row.locator('a.linkbtn');
+  ok(await a.count()===1, 'リンクを入れると ↗ が出る');
+  ok(await a.getAttribute('href')===url, '入れたURLに飛ぶ');
+  ok(await a.getAttribute('target')==='_blank', '新しいタブで開く');
+  ok((await a.getAttribute('rel')||'').includes('noopener'), '開いた先から元のページを触られない（noopener）');
+  ok((await row.locator('.linkhint').textContent()).includes('amazon.co.jp'), '行き先のサイト名が出る');
+  const st = puts.filter(p=>p.key==='settings').pop();
+  ok(st && st.data.initial.some(x=>x.url===url), 'リンクがGitHubに保存される');
+  // 危ないURLはリンクにしない
+  await row.locator('input[type=url]').fill('javascript:alert(1)');
+  await row.locator('input[type=url]').blur(); await page.waitForTimeout(900);
+  ok(await page.locator('.item.chk[data-g="furniture"]').first().locator('a.linkbtn').count()===0,
+     'http(s) 以外はリンクにしない（javascript: を弾く）');
+  ok(await page.evaluate(()=>window.__pwned===undefined), '仕込んだスクリプトが動かない');
 });
 
 await browser.close(); srv.close();
