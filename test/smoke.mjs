@@ -638,6 +638,30 @@ await run('追加が消えない', {files:{settings:null, expenses:null, chat:nu
   ok(files.settings.initial.filter(x=>x.g==='move').length===n0+1, 'GitHub側にも届いている');
 });
 
+// 28) 優先順位の色分け
+await run('優先順位の色', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page)=>{
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  const cls = () => page.evaluate(() =>
+    [...document.querySelectorAll('.item.chk[data-idx]')].map(r => ({
+      label: r.querySelector('.lbl').value,
+      pri: ['pri1','pri2','pri3','pri4','prioff'].find(c => r.classList.contains(c))
+    })));
+  const a = await cls();
+  ok(a.slice(0,5).every(x=>x.pri==='pri1'), '上から5件が赤（pri1）');
+  ok(a[5].pri==='pri2' && a[9].pri==='pri2', '6〜10件目はだいだい（pri2）');
+  ok(a[10].pri==='pri3' && a[14].pri==='pri3', '11〜15件目は黄（pri3）');
+  ok(a[15].pri==='pri4', '16件目からは緑（pri4）');
+  ok((await page.textContent('#view')).includes('1〜5位'), '凡例が出ている');
+  // 用意済みにすると順位から外れ、下が繰り上がる
+  const sixth = a[5].label;
+  await page.locator('.item.chk[data-idx] input[type=checkbox]').first().check();
+  await page.waitForTimeout(700);
+  const b = await cls();
+  ok(b[0].pri==='prioff', '用意済みは灰色（prioff）');
+  ok(b.find(x=>x.label===sixth).pri==='pri1', '用意済みの分だけ繰り上がる');
+  ok(b.filter(x=>x.pri==='pri1').length===5, '赤はいつも5件');
+});
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);

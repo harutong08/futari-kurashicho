@@ -148,7 +148,17 @@ input[type=range]{width:100%;accent-color:var(--accent)}
 .icon.memobtn.on{color:var(--accent)}
 .item.off .memo{opacity:.5}
 /* 長押しで並べ替え */
-.item.chk[data-idx]{border-radius:10px}
+/* 上から数えた順位で色を変える。上ほど優先度が高い扱い */
+.item.chk[data-idx]{border-radius:10px;border-left:4px solid transparent;padding-left:8px;margin-left:-12px}
+.item.chk.pri1{border-left-color:var(--bad);background:var(--bad-soft)}
+.item.chk.pri2{border-left-color:var(--pb);background:var(--pb-soft)}
+.item.chk.pri3{border-left-color:var(--warn);background:var(--warn-soft)}
+.item.chk.pri4{border-left-color:var(--good)}
+.item.chk.prioff{border-left-color:var(--line)}
+.item.chk.pri1 .in,.item.chk.pri2 .in,.item.chk.pri3 .in{background:var(--surface)}
+.item.chk.pri1 .grip{color:var(--bad)}
+.item.chk.pri2 .grip{color:var(--pb)}
+.item.chk.pri3 .grip{color:var(--warn)}
 .grip{color:var(--faint);font-size:15px;line-height:1;cursor:grab;touch-action:none;text-align:center;
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .grip:hover{color:var(--accent)}
@@ -462,7 +472,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-23a";
+const APP_VERSION = "2026-09-23b";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1458,10 +1468,16 @@ function viewHome(){
 function viewInitial(){
   const p=plan(), ex=S.initial.filter(x=>x.off).reduce((a,x)=>a+iAmt(x),0);
   const needR = [0,1].map(i=> Math.ceil(p.need*shareOf(i,"ratio")/1000)*1000);
+  let rank=0;   /* 画面の上から数えた順位。まとまりをまたいで通し番号にする */
+  const priOf = x => {
+    if (x.off) return "prioff";
+    rank++;
+    return rank<=5? "pri1" : rank<=10? "pri2" : rank<=15? "pri3" : "pri4";
+  };
   const groups = IGROUPS.map(g=>{ const items=S.initial.map((x,idx)=>[x,idx]).filter(([x])=>x.g===g.k);
     const sum=items.filter(([x])=>!x.off).reduce((a,[x])=>a+iAmt(x),0);
     return `<div class="group"><div class="ghead"><h3>${g.label}</h3><span class="num">${yen(sum)}</span></div>
-    ${items.map(([x,idx])=>`<div class="item chk ${x.off?"off":""}" data-idx="${idx}" data-g="${esc(g.k)}">
+    ${items.map(([x,idx])=>`<div class="item chk ${x.off?"off":""} ${priOf(x)}" data-idx="${idx}" data-g="${esc(g.k)}">
       <span class="grip" data-grip aria-label="長押しして並べ替え" title="長押し（またはつまんで）並べ替え">⠿</span>
       <input type="checkbox" id="off-${esc(x.id)}" data-f="initial.${idx}.off" data-bool ${x.off?"checked":""} aria-label="${esc(x.label)}を用意済み・不要にする" title="用意済み・不要ならチェック">
       <input class="in lbl" id="il-${esc(x.id)}" data-f="initial.${idx}.label" value="${esc(x.label)}" aria-label="項目名">
@@ -1526,8 +1542,14 @@ function viewInitial(){
 
   <section class="card s12"><h2>初期費用のチェックリスト</h2>
     <p class="sub">松本・塩尻・安曇野の賃貸でよくある条件で試算。物件が決まったら見積もりの金額に書き換えてください。
-      <b>左の ⠿ をつまむか、行を長押しして上下に動かすと並べ替えられます</b>（同じまとまりの中で。優先順位を上から並べる用）。
+      <b>左の ⠿ をつまむか、行を長押しして上下に動かすと並べ替えられます</b>（同じまとまりの中で）。
       鉛筆のボタンでメモも書けます</p>
+    <div class="tally" style="margin:8px 0 2px">
+      <span class="pill bad">1〜5位</span><span class="pill" style="background:var(--pb-soft);color:var(--pb)">6〜10位</span>
+      <span class="pill warn">11〜15位</span><span class="pill good">16位〜</span>
+      <span class="pill neutral">用意済みは対象外</span>
+    </div>
+    <p class="note" style="margin:0 0 4px">上から数えた順番がそのまま優先順位です。上ほど赤くなります。</p>
     <div class="stack">${groups}</div>
   </section>
   </div>`;
