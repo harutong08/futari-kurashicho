@@ -175,10 +175,11 @@ a.icon.linkbtn:hover{background:var(--accent-soft)}
   user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
 .grip:hover{color:var(--accent)}
 .item.chk.dragging .grip{cursor:grabbing;color:var(--accent)}
-.item.chk.dragging{background:var(--accent-soft);box-shadow:var(--shadow);position:relative;z-index:2;touch-action:none}
+.item.chk.dragging{background:var(--accent-soft);position:relative;z-index:3;touch-action:none;
+  box-shadow:0 10px 26px -8px rgba(28,42,39,.35),0 2px 6px rgba(28,42,39,.12);transition:none!important}
 .item.chk.dragging .in{background:var(--surface)}
 body.dragbusy{overflow:hidden;user-select:none;-webkit-user-select:none}
-body.dragbusy .item.chk{transition:transform .12s}
+body.dragbusy{cursor:grabbing}
 @media (max-width:460px){.item{grid-template-columns:1fr 112px 30px}}
 /* 狭い画面では、名前が細長い柱にならないように横並びをやめる。
    1行目＝つまみ・チェック・名前、2行目＝金額とボタン */
@@ -496,7 +497,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-23d";
+const APP_VERSION = "2026-09-23e";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1817,21 +1818,93 @@ const PRESS_MS=420, PRESS_SLOP=8;
 function rowsOf(g){ return [...document.querySelectorAll('.item.chk[data-g="'+CSS.escape(g)+'"]')]; }
 function clearPress(){ clearTimeout(pressTimer); pressTimer=null; }
 
+const SLIDE_MS=180;
+const smooth = !window.matchMedia || !window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
 function startDrag(el, pointerId){
   pressTimer=null;
-  drag={el, g:el.dataset.g};
+  const r=el.getBoundingClientRect();
+  drag={ el, g:el.dataset.g, pointerId,
+         grab: (pressY||r.top+r.height/2) - r.top,   /* 行の上端から、つかんだ位置までの距離 */
+         y: pressY||r.top+r.height/2, mid:0, raf:0, edge:0 };
   el.classList.add("dragging");
   document.body.classList.add("dragbusy");
+  rowsOf(drag.g).forEach(x=>{ x.style.willChange="transform"; });
   try{ el.setPointerCapture(pointerId); }catch(e){}
   try{ if(navigator.vibrate) navigator.vibrate(12); }catch(e){}
+  place();
+  edgeLoop();
 }
+
+/* つかんでいる行を指の位置に合わせる。
+   いったん transform を外して「本来の位置」を測り直すので、
+   途中で並びが変わっても指からずれない。 */
+function place(){
+  const el=drag.el;
+  el.style.transform="";
+  const r=el.getBoundingClientRect();
+  const d=(drag.y - drag.grab) - r.top;
+  el.style.transform="translateY("+d+"px)"+(smooth? " scale(1.015)" : "");
+  drag.mid=r.top+d+r.height/2;
+}
+
+/* 並びを入れ替えるときは、動いた分を打ち消してから0へ戻す（FLIP）。
+   こうすると、よけた行がスッと滑って見える。 */
+function slideSwap(mutate){
+  const rows=rowsOf(drag.g);
+  const before=new Map(rows.map(r=>[r, r.getBoundingClientRect().top]));
+  mutate();
+  if (!smooth) return;
+  rows.forEach(r=>{
+    if (r===drag.el) return;
+    const d=before.get(r)-r.getBoundingClientRect().top;
+    if (!d) return;
+    r.style.transition="none";
+    r.style.transform="translateY("+d+"px)";
+    requestAnimationFrame(()=>{
+      r.style.transition="transform "+SLIDE_MS+"ms cubic-bezier(.2,.7,.3,1)";
+      r.style.transform="";
+    });
+  });
+}
+function maybeSwap(){
+  for (const r of rowsOf(drag.g)){
+    if (r===drag.el) continue;
+    const b=r.getBoundingClientRect(), mid=b.top+b.height/2;
+    const after=!!(r.compareDocumentPosition(drag.el) & Node.DOCUMENT_POSITION_FOLLOWING);
+    if (after && drag.mid<mid){ slideSwap(()=>r.parentNode.insertBefore(drag.el, r)); place(); return; }
+    if (!after && drag.mid>mid){ slideSwap(()=>r.parentNode.insertBefore(drag.el, r.nextSibling)); place(); return; }
+  }
+}
+
+/* 画面の端まで持っていったら、ゆっくり自動でスクロールする */
+function edgeLoop(){
+  if (!drag) return;
+  const m=70, h=window.innerHeight;
+  let v=0;
+  if (drag.y<m) v=-Math.min(14,(m-drag.y)/4);
+  else if (drag.y>h-m) v=Math.min(14,(drag.y-(h-m))/4);
+  if (v){ window.scrollBy(0, v); place(); maybeSwap(); }
+  drag.raf=requestAnimationFrame(edgeLoop);
+}
+
 function endDrag(){
   if (!drag) return;
-  const {el,g}=drag;
-  el.classList.remove("dragging");
+  const {el,g,raf}=drag;
+  cancelAnimationFrame(raf);
   document.body.classList.remove("dragbusy");
   const order=rowsOf(g).map(r=>+r.dataset.idx);
+  const rows=rowsOf(g);
   drag=null;
+  /* つかんでいた行を、収まる場所まで滑らせてから離す */
+  if (smooth){
+    el.style.transition="transform "+SLIDE_MS+"ms cubic-bezier(.2,.7,.3,1)";
+    el.style.transform="";
+  } else { el.style.transform=""; }
+  setTimeout(()=>{
+    rows.forEach(r=>{ r.style.transition=""; r.style.transform=""; r.style.willChange=""; });
+    el.classList.remove("dragging");
+  }, smooth? SLIDE_MS+20 : 0);
   applyInitialOrder(g, order);
 }
 function applyInitialOrder(g, order){
@@ -1840,15 +1913,18 @@ function applyInitialOrder(g, order){
   const objs=order.map(i=>S.initial[i]);
   const same=slots.every((pos,k)=>S.initial[pos]===objs[k]);
   slots.forEach((pos,k)=>{ S.initial[pos]=objs[k]; });
-  if (same){ render(); return; }
-  commit(true);
+  if (same) return;
+  scheduleSave(true);
   toast("並べ替えました");
+  /* 滑り終わってから描き直す（途中で作り直すと動きが途切れるため） */
+  setTimeout(render, smooth? SLIDE_MS+40 : 0);
 }
 
 document.addEventListener("pointerdown", e=>{
   if (e.pointerType==="mouse" && e.button!==0) return;
   const el=e.target.closest(".item.chk[data-idx]");
   if (!el || !canWrite()) return;
+  pressX=e.clientX; pressY=e.clientY;
   /* つまみ（⠿）からは、すぐつかめる */
   if (e.target.closest("[data-grip]")){
     if (e.cancelable) e.preventDefault();
@@ -1857,7 +1933,6 @@ document.addEventListener("pointerdown", e=>{
   }
   /* 行の余白からは長押しで。文字入力やボタンの上からは始めない */
   if (e.target.closest("input,button,select,textarea,label")) return;
-  pressX=e.clientX; pressY=e.clientY;
   clearTimeout(pressTimer);
   const id=e.pointerId;
   pressTimer=setTimeout(()=>startDrag(el, id), PRESS_MS);
@@ -1866,14 +1941,9 @@ document.addEventListener("pointermove", e=>{
   if (pressTimer && (Math.abs(e.clientX-pressX)>PRESS_SLOP || Math.abs(e.clientY-pressY)>PRESS_SLOP)) clearPress();
   if (!drag) return;
   if (e.cancelable) e.preventDefault();
-  const y=e.clientY;
-  for (const r of rowsOf(drag.g)){
-    if (r===drag.el) continue;
-    const b=r.getBoundingClientRect(), mid=b.top+b.height/2;
-    const after=!!(r.compareDocumentPosition(drag.el) & Node.DOCUMENT_POSITION_FOLLOWING);
-    if (y<mid && after){ r.parentNode.insertBefore(drag.el, r); break; }
-    if (y>mid && !after){ r.parentNode.insertBefore(drag.el, r.nextSibling); break; }
-  }
+  drag.y=e.clientY;
+  place();
+  maybeSwap();
 }, {passive:false});
 document.addEventListener("pointerup", ()=>{ clearPress(); endDrag(); });
 document.addEventListener("pointercancel", ()=>{ clearPress(); endDrag(); });

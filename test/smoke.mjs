@@ -719,6 +719,40 @@ await run('項目のリンク', {files:{settings:null, expenses:null, chat:null,
   ok(await page.evaluate(()=>window.__pwned===undefined), '仕込んだスクリプトが動かない');
 });
 
+// 31) 並べ替えの動きがなめらか
+await run('並べ替えの動き', {files:{settings:null, expenses:null, chat:null, todos:null}, token:'github_pat_owner'}, async (page)=>{
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  const rows = page.locator('.item.chk[data-g="contract"]');
+  await rows.nth(0).scrollIntoViewIfNeeded(); await page.waitForTimeout(250);
+  const g = await rows.nth(0).locator('[data-grip]').boundingBox();
+  const start = await rows.nth(0).boundingBox();
+  await page.mouse.move(g.x+g.width/2, g.y+g.height/2);
+  await page.mouse.down(); await page.waitForTimeout(80);
+  // 行の高さの半分より小さく動かす（まだ入れ替わらない範囲）
+  const dy = Math.floor(start.height/2) - 6;
+  await page.mouse.move(g.x+g.width/2, g.y+g.height/2+dy, {steps:6});
+  await page.waitForTimeout(80);
+  const moved = await rows.nth(0).boundingBox();
+  ok(Math.abs((moved.y - start.y) - dy) <= 3, '指の動きにそのまま付いてくる（ずれ '+Math.round(moved.y-start.y-dy)+'px）');
+  ok(await page.locator('.item.chk.dragging').count()===1, 'つかんでいる行が浮いて見える');
+  const t = await page.locator('.item.chk.dragging').evaluate(el=>getComputedStyle(el).transform);
+  ok(t && t!=='none', 'つかんでいる行に位置のずらしが当たっている');
+  // さらに動かして入れ替え、よけた行に滑りの指定が入る
+  const third = await rows.nth(2).boundingBox();
+  await page.mouse.move(g.x+g.width/2, third.y+third.height/2+6, {steps:8});
+  await page.waitForTimeout(40);
+  const sliding = await page.evaluate(()=>[...document.querySelectorAll('.item.chk[data-g="contract"]')]
+      .filter(r=>!r.classList.contains('dragging'))
+      .some(r=>/transform/.test(r.style.transition||'')));
+  ok(sliding, 'よけた行が滑って動く（transitionが当たる）');
+  await page.mouse.up();
+  await page.waitForTimeout(900);
+  const leftover = await page.evaluate(()=>[...document.querySelectorAll('.item.chk')]
+      .some(r=>r.style.transform || r.style.transition || r.style.willChange));
+  ok(!leftover, '離したあとは指定が残らない（元の見た目に戻る）');
+  ok(await page.locator('.item.chk.dragging').count()===0, '浮いた見た目も解除される');
+});
+
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');
 process.exit(fail?1:0);
