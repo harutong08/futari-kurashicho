@@ -1,0 +1,9 @@
+{
+ "v": 1,
+ "enc": "aes-gcm",
+ "kdf": "pbkdf2-sha256",
+ "iter": 200000,
+ "salt": "4o85kY4RJXSFgAZwiPDwhw==",
+ "iv": "cU33au+WZPWyyx3x",
+ "data": "KOgtXXlKFxCxj9kYVJNHlcUFfVwTDwm7knhRa0B+DFrlisANFNwCO8hgPUyDmb+1APtT2OHntUZ4eu9SKxD/jWnsK+tsOCJJqtbeqk0hhzgg55z1jf4GirWQHVghw81d9qUxrOWyiFcXpyEHkCGOrxg7Y7d4/AEV0LcFEyLYT2b0czkxCtXxvNkYlmuvwh73kDEVNo+xWj7JsxIWZycu+YBR5CZmEuBu8+xs"
+}
