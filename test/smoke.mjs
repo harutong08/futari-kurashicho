@@ -64,7 +64,7 @@ async function run(name, {files, token, pass, repoStatus, hash, clipboard}, body
     urls.push(m+' '+u);
     if (STRAY_SLASH.test(u)) return route.fulfill({status:400, body:'{"message":"Bad Request"}'});
     if (m==='OPTIONS') return route.fulfill({status:204, headers:CORS});
-    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : 'expenses';
+    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : x.includes('links') ? 'links' : 'expenses';
     if (m==='PUT'){ const key = keyOf(u);
       const b = JSON.parse(req.postData()||'{}');
       puts.push({key, data: JSON.parse(Buffer.from(b.content,'base64').toString('utf8'))});
@@ -751,6 +751,73 @@ await run('並べ替えの動き', {files:{settings:null, expenses:null, chat:nu
       .some(r=>r.style.transform || r.style.transition || r.style.willChange));
   ok(!leftover, '離したあとは指定が残らない（元の見た目に戻る）');
   ok(await page.locator('.item.chk.dragging').count()===0, '浮いた見た目も解除される');
+});
+
+// 32〜33) 参考リンク
+await run('参考リンク', {files:{settings:null, expenses:null, chat:null, todos:null, links:null}, token:'github_pat_owner'}, async (page,{puts,files})=>{
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  ok(await page.evaluate(()=>{ const c=document.querySelector('#view .card'); return !!c && c.textContent.includes('参考リンク'); }),
+     '初期費用タブのいちばん上にある');
+  ok(await page.locator('#refGo').isHidden(), 'URLを貼る前は「開く」が出ない');
+  // 貼った瞬間に飛べる
+  const U1 = 'https://suumo.jp/chintai/jnc_000012345678/';
+  await page.fill('#refUrl', U1);
+  ok(await page.locator('#refGo').isVisible(), '貼った瞬間に「開く」が出る（追加する前から）');
+  ok(await page.locator('#refGo').getAttribute('href')===U1, '「開く」の行き先が貼ったURL');
+  ok(await page.locator('#refGo').getAttribute('target')==='_blank', '新しいタブで開く');
+  ok((await page.locator('#refGo').getAttribute('rel')||'').includes('noopener'), 'noopenerが付いている');
+  await page.fill('#refTitle', '松本駅近の2LDK');
+  await page.click('#refForm button[type=submit]'); await page.waitForTimeout(900);
+  const first = page.locator('.refs .ref').first();
+  ok((await first.locator('.refttl').textContent()).includes('松本駅近の2LDK'), 'タイトルで一覧に並ぶ');
+  ok(await first.locator('a.reft').getAttribute('href')===U1, 'タイトルを押すと飛べる（ほしい物リストのように）');
+  ok((await first.locator('.refhost').textContent()).includes('suumo.jp'), '行き先のサイト名が出る');
+  ok((await page.inputValue('#refUrl'))==='' && (await page.inputValue('#refTitle'))==='', '追加すると入力欄が空になる');
+  const l1 = puts.filter(p=>p.key==='links').pop();
+  ok(l1 && l1.data.some(x=>x.url===U1 && x.title==='松本駅近の2LDK'), 'GitHubに保存される');
+  // 共有シートの「文字＋URL」をそのまま貼る
+  await page.fill('#refUrl', 'ニトリ 冷蔵庫 2ドア https://www.nitori-net.jp/ec/product/9999999s/');
+  ok((await page.inputValue('#refUrl'))==='https://www.nitori-net.jp/ec/product/9999999s/', '文字が混ざっていてもURLだけ取り出す');
+  ok((await page.inputValue('#refTitle'))==='ニトリ 冷蔵庫 2ドア', '残りの文字はタイトルに回る');
+  await page.click('#refForm button[type=submit]'); await page.waitForTimeout(900);
+  ok(await page.locator('.refs .ref').count()===2, '2件になる');
+  ok((await page.locator('.refs .ref').first().locator('.refttl').textContent()).includes('ニトリ'), '新しいものが上に来る');
+  // 同じURLは二重に入れない
+  await page.fill('#refUrl', U1); await page.click('#refForm button[type=submit]'); await page.waitForTimeout(500);
+  ok(await page.locator('.refs .ref').count()===2, '同じURLは二重に入らない');
+  ok((await page.textContent('#toast')).includes('もう入っています'), 'その旨を知らせる');
+  // 危ないURLは入らない
+  await page.fill('#refUrl', 'javascript:alert(1)');
+  ok(await page.locator('#refGo').isHidden(), 'javascript: には「開く」を出さない');
+  await page.click('#refForm button[type=submit]'); await page.waitForTimeout(400);
+  ok(await page.locator('.refs .ref').count()===2, 'javascript: は追加されない');
+  // 相手が足した分を取り込む
+  await page.fill('#refUrl', '');
+  const cur = puts.filter(p=>p.key==='links').pop().data;
+  files.links = [...cur, {id:'link-partner', title:'引越し見積もり比較', url:'https://example.com/hikkoshi', at:1, by:1}];
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(150);
+  await page.click('[data-act="ghSync"]'); await page.waitForTimeout(800);
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(350);
+  ok((await page.textContent('.refs')).includes('引越し見積もり比較'), '相手が足した分が出る');
+  // 消す
+  const n0 = await page.locator('.refs .ref').count();
+  await page.locator('.refs .ref').first().locator('[data-act="delLink"]').click(); await page.waitForTimeout(900);
+  ok(await page.locator('.refs .ref').count()===n0-1, '消せる');
+  const l2 = puts.filter(p=>p.key==='links').pop();
+  ok(l2.data.length===n0-1 && l2.data.some(x=>x.id==='link-partner'), '消したことがGitHubに反映され、相手の分は残る');
+});
+
+await run('参考リンクも暗号化される', {files:{settings:null, expenses:null, chat:null, todos:null, links:null}, token:'github_pat_owner'}, async (page,{puts})=>{
+  const answers=[PASS,PASS];
+  page.on('dialog', d=>d.accept(answers.shift() ?? ''));
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
+  await page.fill('#refUrl', 'https://example.com/himitsu-bukken');
+  await page.click('#refForm button[type=submit]'); await page.waitForTimeout(800);
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="passSet"]'); await page.waitForTimeout(3000);
+  const l = puts.filter(p=>p.key==='links').pop();
+  ok(l && l.data.enc==='aes-gcm', '参考リンクも暗号化して保存する');
+  ok(!JSON.stringify(l.data).includes('himitsu'), 'URLが読み取れない');
 });
 
 await browser.close(); srv.close();
