@@ -12,7 +12,7 @@ const HERE = dirname(fileURLToPath(import.meta.url));
 const ROOT = join(HERE, '..');
 const HTML = readFileSync(join(ROOT, 'index.html'));
 const TYPES = {'.js':'text/javascript', '.json':'application/json', '.wasm':'application/wasm',
-               '.png':'image/png', '.txt':'text/plain', '.webmanifest':'application/manifest+json'};
+               '.png':'image/png', '.txt':'text/plain', '.webmanifest':'application/manifest+json', '.html':'text/html; charset=utf-8'};
 /* この環境にはPlaywright同梱のブラウザがないことがあるので、あればシステムのChromiumを使う */
 const SYS = ['/opt/pw-browsers/chromium-1194/chrome-linux/chrome', '/opt/pw-browsers/chromium/chrome-linux/chrome'].find(p => existsSync(p));
 /* index.html のほか、同梱した読み取り部品（vendor/）も本番と同じように配る */
@@ -26,7 +26,8 @@ const srv = createServer((q,r)=>{
   if (path==='/' || path==='/index.html'){
     r.writeHead(200,{'content-type':'text/html; charset=utf-8'}); r.end(HTML); return;
   }
-  const rel = path.replace(/^\/+/,'');
+  let rel = path.replace(/^\/+/,'');
+  if (rel.endsWith('/')) rel += 'index.html';   /* フォルダは index.html を返す（本番と同じ） */
   if (rel.includes('..')){ r.writeHead(400); r.end(); return; }
   try{
     const buf = readFileSync(join(ROOT, rel));
@@ -819,6 +820,67 @@ await run('参考リンクも暗号化される', {files:{settings:null, expense
   ok(l && l.data.enc==='aes-gcm', '参考リンクも暗号化して保存する');
   ok(!JSON.stringify(l.data).includes('himitsu'), 'URLが読み取れない');
 });
+
+// 34) サンプル版
+{
+  const ctx = await browser.newContext();
+  const apiCalls = [];
+  await ctx.route('https://api.github.com/**', r=>{ apiCalls.push(r.request().url()); return r.fulfill({status:500, headers:CORS, body:'{}'}); });
+  const page = await ctx.newPage();
+  const errs=[];
+  page.on('pageerror', e=>errs.push(String(e)));
+  // 本物の持ち主が同じブラウザで使っている状態を作っておく
+  await page.addInitScript(()=>{
+    if (!sessionStorage.getItem('__seeded')){
+      localStorage.setItem('futari.token','github_pat_REAL');
+      localStorage.setItem('futari.pass','ほんものの合言葉');
+      localStorage.setItem('futari.settings', JSON.stringify({names:['本物の名前A','本物の名前B']}));
+      sessionStorage.setItem('__seeded','1');
+    }
+  });
+  console.log('\n[サンプル版]');
+  await page.goto(url+'demo/'); await page.waitForTimeout(1200);
+  ok(page.url().includes('?demo'), '/demo/ から本体の ?demo に移る');
+  ok(errs.length===0, 'JSエラーなし '+(errs[0]||''));
+  ok(await page.locator('#demoBanner').isVisible(), 'サンプル版の帯が出る');
+  ok((await page.textContent('#nameA'))==='Aさん' && (await page.textContent('#nameB'))==='Bさん', '名前は伏せてある（Aさん・Bさん）');
+  ok(!(await page.textContent('body')).includes('本物の名前'), '本物の名前は一切出ない');
+  ok((await page.textContent('#sync')).includes('サンプル'), '右上にサンプルと出る');
+  ok(await page.locator('.todos li').count()>=5, 'やることリストに見本が入っている');
+  ok(await page.locator('.todos li.st-over').count()>=1, '期限切れの見本もある（色分けが見える）');
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
+  ok(await page.locator('.refs .ref').count()===3, '参考リンクの見本が入っている');
+  ok(await page.locator('.item.chk.off').count()>=1, '用意済みの見本もある');
+  await page.click('[data-tab="log"]'); await page.waitForTimeout(300);
+  ok(await page.locator('.explist li').count()>=5, '家計簿に今月の見本が入っている');
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(300);
+  ok(await page.locator('.msg').count()===4, 'チャットの見本が入っている');
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(300);
+  ok(await page.locator('#ghToken').count()===0, 'GitHubにつなぐ欄は出ない');
+  ok(await page.locator('[data-act="ghInvite"]').count()===0, '招待リンクも出ない（本物のトークンが漏れない）');
+  // 触ってみる
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  await page.fill('#todoText','サンプルで足したやること'); await page.click('#todoForm button[type=submit]'); await page.waitForTimeout(500);
+  ok((await page.textContent('.todos')).includes('サンプルで足したやること'), 'サンプルでも普通に触れる');
+  ok(apiCalls.length===0, 'GitHubには一度もつながない（'+apiCalls.length+'回）');
+  const real = await page.evaluate(()=>({
+    token: localStorage.getItem('futari.token'),
+    pass: localStorage.getItem('futari.pass'),
+    settings: localStorage.getItem('futari.settings'),
+    todos: localStorage.getItem('futari.todos'),
+    demoTodos: localStorage.getItem('demo.futari.todos')
+  }));
+  ok(real.token==='github_pat_REAL' && real.pass==='ほんものの合言葉', '本物のトークンと合言葉はそのまま');
+  ok(real.settings.includes('本物の名前A'), '本物の設定を上書きしない');
+  ok(real.todos===null, '本物のやることリストに書き込まない');
+  ok(real.demoTodos && real.demoTodos.includes('サンプルで足したやること'), 'サンプルの分は別の場所に残る');
+  // 最初の状態に戻す
+  page.on('dialog', d=>d.accept());
+  await page.click('#demoBanner [data-act="demoReset"]'); await page.waitForTimeout(1500);
+  ok(!(await page.textContent('.todos')).includes('サンプルで足したやること'), '「最初の状態に戻す」で見本に戻る');
+  ok(await page.evaluate(()=>localStorage.getItem('futari.token'))==='github_pat_REAL', '戻しても本物には触れない');
+  await ctx.close();
+}
 
 await browser.close(); srv.close();
 console.log(fail? `\n${fail}件 失敗` : '\nすべて成功');

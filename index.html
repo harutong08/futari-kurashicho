@@ -241,6 +241,11 @@ svg text{font-family:var(--f-num)}
 @media (prefers-reduced-motion: reduce){.toast{transition:none}}
 textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-size:12px}
 
+/* サンプル版の帯 */
+#demoBanner{margin:12px 0 0;padding:10px 14px;border-radius:12px;background:var(--warn-soft);color:var(--ink);
+  font-size:13px;line-height:1.6;border:1px solid var(--line)}
+#demoBanner b{color:var(--warn)}
+
 /* 参考リンク */
 .refform{display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center}
 .refgo{white-space:nowrap;text-decoration:none;display:inline-flex;align-items:center;gap:4px;color:var(--accent);font-weight:600}
@@ -331,6 +336,22 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
 <script>
 (function(){
 "use strict";
+/* ===== サンプル版 =====
+   ?demo を付けて開くと、架空の2人の見本データで動く。GitHubには一切つながず、
+   保存は「demo.」で始まる別の名前にするので、同じブラウザで本物を使っていても混ざらない。
+   ここで localStorage を差し替えるので、以下のコードはすべてこれを通る。 */
+const DEMO = (()=>{ try{ return new URLSearchParams(location.search).has("demo"); }catch(e){ return false; } })();
+const localStorage = (()=>{
+  let base=null; try{ base=window.localStorage; }catch(e){}
+  if (!DEMO) return base || {getItem:()=>null, setItem:()=>{}, removeItem:()=>{}};
+  const P="demo.";
+  return {
+    getItem:k=>{ try{ return base? base.getItem(P+k) : null; }catch(e){ return null; } },
+    setItem:(k,v)=>{ try{ if(base) base.setItem(P+k, v); }catch(e){} },
+    removeItem:k=>{ try{ if(base) base.removeItem(P+k); }catch(e){} },
+    clearAll:()=>{ try{ if(!base) return; Object.keys(base).filter(k=>k.startsWith(P)).forEach(k=>base.removeItem(k)); }catch(e){} }
+  };
+})();
 const GROUPS = [
   {k:"home", label:"住まい"}, {k:"util", label:"光熱費"}, {k:"comm", label:"通信"}, {k:"food", label:"食費"},
   {k:"fun", label:"外食・デート"}, {k:"life", label:"日用品・暮らし"}, {k:"car", label:"車"}, {k:"other", label:"予備費・その他"}
@@ -511,7 +532,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-24a";
+const APP_VERSION = "2026-09-26a";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -685,7 +706,8 @@ function markDirty(){ localDirty=true; setSync(); nudge(); }
 function setSync(){
   const el=$("#sync"); if(!el) return;
   el.classList.toggle("on", mode==="github" && !lastErr && !locked);
-  const txt = locked ? "合言葉まち"
+  const txt = DEMO ? "サンプル（このブラウザだけ）"
+    : locked ? "合言葉まち"
     : lastErr ? lastErr
     : busy ? "保存中…"
     : mode==="github" ? (pass? "2人で同期中（暗号化）" : "2人で同期中")
@@ -1050,6 +1072,15 @@ function ghDisconnect(){
 }
 
 async function boot(){
+  if (DEMO){
+    token=""; pass=""; mode="local";
+    seedDemo(false);
+    loadLocal();
+    document.title="ふたりの信州暮らし帳（サンプル）";
+    demoBanner();
+    setSync(); render();
+    return;
+  }
   const invite=takeInviteToken();
   try{ token=invite.token||(localStorage.getItem(TOKEN_KEY)||"").trim(); }catch(e){ token=invite.token; }
   try{ pass=invite.pass||(localStorage.getItem(PASS_KEY)||""); }catch(e){ pass=invite.pass; }
@@ -1283,6 +1314,87 @@ async function readReceipt(file){
     ocrSay('<b style="color:var(--bad)">'+esc(e.message||"読み取りに失敗しました")+'</b>');
   }
   ocrBusy=false;
+}
+
+/* 見本データ。日付はいつ開いても新しく見えるよう、今日を基準に作る */
+function demoSeed(){
+  const now=new Date(), H=3600e3, t=Date.now();
+  const iso=x=>x.getFullYear()+"-"+String(x.getMonth()+1).padStart(2,"0")+"-"+String(x.getDate()).padStart(2,"0");
+  const rel=n=>{ const x=new Date(); x.setDate(x.getDate()+n); return iso(x); };
+  const inMonth=n=>{ const x=new Date(now.getFullYear(), now.getMonth(), Math.max(1, now.getDate()-n)); return iso(x); };
+  const s=clone(DEFAULT);
+  s.names=["Aさん","Bさん"];
+  s.incomes=[230000,170000];
+  s.split="ratio";
+  s.savings.current=180000;
+  s.savings.monthly=[50000,40000];
+  s.savings.moveIn=addMonths(todayStr().slice(0,7),6);
+  s.savings.bonuses=s.savings.bonuses.map(b=>b.id==="winter"? Object.assign(b,{amt:[100000,60000]}) : b);
+  const it=id=>s.initial.find(x=>x.id===id)||{};
+  it("shiki").note="物件によって1〜2か月。内見のときに確認する";
+  it("rei").note="礼金0の物件も候補に入れる";
+  Object.assign(it("fridge"),{note:"Bさんの一人暮らし用は小さいので買い替え", url:"https://www.nitori-net.jp/"});
+  Object.assign(it("wash"),{off:true, note:"Aさんのを持っていく"});
+  Object.assign(it("kitchen"),{off:true});
+  return {
+    S:s,
+    expenses:[
+      {id:"dx1", date:inMonth(0),  cat:"food", amount:4280, payer:0, memo:"週末のまとめ買い", createdAt:t-2*H},
+      {id:"dx2", date:inMonth(1),  cat:"fun",  amount:3600, payer:1, memo:"ランチ", createdAt:t-26*H},
+      {id:"dx3", date:inMonth(2),  cat:"life", amount:1980, payer:"joint", memo:"洗剤・ティッシュ", createdAt:t-50*H},
+      {id:"dx4", date:inMonth(4),  cat:"food", amount:6120, payer:1, memo:"スーパー", createdAt:t-98*H},
+      {id:"dx5", date:inMonth(6),  cat:"car",  amount:5400, payer:0, memo:"ガソリン", createdAt:t-146*H},
+      {id:"dx6", date:inMonth(8),  cat:"util", amount:9800, payer:"joint", memo:"電気代", createdAt:t-194*H},
+      {id:"dx7", date:inMonth(11), cat:"food", amount:3350, payer:0, memo:"パン屋と八百屋", createdAt:t-266*H},
+      {id:"dx8", date:inMonth(14), cat:"fun",  amount:7200, payer:0, memo:"映画と夕ごはん", createdAt:t-338*H}
+    ],
+    todos:[
+      {id:"dt1", text:"今の家の退去を連絡する", due:rel(-1), done:false, by:0, at:t-9*24*H},
+      {id:"dt2", text:"内見の予約をする", due:rel(1), done:false, by:1, at:t-6*24*H},
+      {id:"dt3", text:"引越し業者に見積もりを頼む", due:rel(3), done:false, by:0, at:t-5*24*H},
+      {id:"dt4", text:"住民票の異動", due:rel(40), done:false, by:1, at:t-4*24*H},
+      {id:"dt5", text:"家具・家電の買い物リストを作る", due:"", done:false, by:0, at:t-3*24*H},
+      {id:"dt6", text:"分担の決めごとを話す", due:"", done:true, doneAt:t-2*24*H, by:1, at:t-8*24*H}
+    ],
+    chat:[
+      {id:"dc1", who:1, text:"内見、土曜の午前で取れそう！", at:t-5*H},
+      {id:"dc2", who:0, text:"ありがとう。駐車場が2台分あるか聞いておいて", at:t-4.5*H},
+      {id:"dc3", who:1, text:"了解。冬の灯油代も聞いてみる", at:t-4*H},
+      {id:"dc4", who:0, text:"今日の夜ごはん、いる？", at:t-40*60*1000}
+    ],
+    links:[
+      {id:"dl1", title:"物件さがし（SUUMO）", url:"https://suumo.jp/", at:t-3*H, by:1},
+      {id:"dl2", title:"転入の手続き（松本市）", url:"https://www.city.matsumoto.nagano.jp/", at:t-30*H, by:0},
+      {id:"dl3", title:"家具の候補（ニトリ）", url:"https://www.nitori-net.jp/", at:t-70*H, by:0}
+    ]
+  };
+}
+function seedDemo(force){
+  if (!force && localStorage.getItem("futari.settings")) return;
+  const d=demoSeed();
+  localStorage.setItem("futari.settings", JSON.stringify(d.S));
+  localStorage.setItem("futari.expenses", JSON.stringify(d.expenses));
+  localStorage.setItem("futari.chat", JSON.stringify(d.chat));
+  localStorage.setItem("futari.todos", JSON.stringify(d.todos));
+  localStorage.setItem("futari.links", JSON.stringify(d.links));
+  localStorage.setItem("futari.me", "0");
+  localStorage.setItem("futari.chatseen", String(Date.now()-4.2*3600e3));   /* 1件だけ未読に見せる */
+}
+function demoBanner(){
+  if (document.getElementById("demoBanner")) return;
+  const b=document.createElement("div");
+  b.id="demoBanner";
+  b.innerHTML='<b>サンプル版</b>　架空の2人の見本です。自由に触ってOK。入力はこのブラウザの中だけに残り、どこにも送られません。'
+    +' <button class="btn small" data-act="demoReset" style="margin-left:6px">最初の状態に戻す</button>';
+  const wrap=document.querySelector(".wrap");
+  if (wrap) wrap.insertBefore(b, wrap.firstChild);
+}
+function demoCard(){
+  return `<section class="card s12 flat"><h2>2人で同期する</h2>
+    <p class="sub">本物では、ここでGitHubにつなぐと2人の端末で同じデータを見られます（合言葉で暗号化も可）。
+      サンプル版ではつながず、入力はこのブラウザの中だけに残ります。</p>
+    <div class="row"><button class="btn small" data-act="demoReset">見本データを最初の状態に戻す</button></div>
+  </section>`;
 }
 
 /* ---------- 描画ヘルパー ---------- */
@@ -1795,7 +1907,7 @@ function viewBudget(){
     </div>
   </section>
 
-  ${syncCard()}
+  ${DEMO? demoCard() : syncCard()}
 
   <section class="card s12 flat"><h2>データのバックアップ</h2>
     <p class="sub">設定と家計簿をテキストでコピーして保存できます。別の画面に貼り付けて読み込むことも可能です</p>
@@ -2134,6 +2246,10 @@ document.addEventListener("click", async e=>{
     pass=""; cryptoKey=null; cryptoSalt=null; locked=true; encTrouble.clear();
     try{ localStorage.removeItem(PASS_KEY); }catch(err){}
     render(); return; }
+  if (act==="demoReset"){
+    if (!DEMO) return;
+    if (!confirm("見本データを最初の状態に戻しますか？（このブラウザで触った内容は消えます）")) return;
+    localStorage.clearAll(); seedDemo(true); location.reload(); return; }
   if (act==="delLink"){
     if (!canWrite()){ nudge(); return; }
     const id=t.dataset.id; deletedLink.add(id); links=links.filter(x=>x.id!==id); saveLinksSoon(); render(); return; }
