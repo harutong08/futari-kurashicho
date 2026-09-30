@@ -54,8 +54,8 @@ const ok = (c,m)=>{ console.log((c?'  ok  ':'  NG  ')+m); if(!c) fail++; };
 
 const browser = await chromium.launch(SYS ? {executablePath:SYS} : {});
 
-async function run(name, {files, token, pass, repoStatus, hash, clipboard}, body){
-  const ctx = await browser.newContext(clipboard ? {permissions:['clipboard-read','clipboard-write']} : {});
+async function run(name, {files, token, pass, repoStatus, hash, clipboard, perms, init}, body){
+  const ctx = await browser.newContext({permissions:[...(clipboard?['clipboard-read','clipboard-write']:[]), ...(perms||[])]});
   const puts = [], urls = [];
   /* 余計な末尾スラッシュ（/repos/owner/repo/）は、本物のGitHubなら 400 かつCORSヘッダ無しで返る。
      ブラウザからは「Failed to fetch」としか見えない事故を再現するため、ここでも同じ扱いにする */
@@ -86,6 +86,7 @@ async function run(name, {files, token, pass, repoStatus, hash, clipboard}, body
   page.on('console', m=>{ const t=m.text(); if(m.type()==='error' && !/ERR_CERT|fonts\.(googleapis|gstatic)|api\.github\.com|404 \(Not Found\)/.test(t+' '+(m.location()||{}).url)) errs.push('console: '+t); });
   if (token) await page.addInitScript(t=>localStorage.setItem('futari.token',t), token);
   if (pass) await page.addInitScript(p=>localStorage.setItem('futari.pass',p), pass);
+  if (init) await page.addInitScript(init);
   await page.goto(url + (hash||''));
   await page.waitForTimeout(900);
   console.log('\n['+name+']');
@@ -863,7 +864,16 @@ await run('おすすめ物件', {files:F0(), token:'github_pat_owner'}, async (p
   await featBtn().click(); await page.waitForTimeout(300);
   ok(!/want|must/.test(await featBtn().getAttribute('class')), 'さらに押すと外れる');
   await featBtn().click(); await page.waitForTimeout(300);   // 「あれば嬉しい」に戻す
-  await page.fill('#f-search-maxRent', '75000'); await page.press('#f-search-maxRent','Tab'); await page.waitForTimeout(700);
+  ok(await page.locator('select#f-search-maxRent').count()===1 && await page.locator('select#f-search-minArea').count()===1, '賃料の上限と面積も選択式（打ち込まない）');
+  ok(await page.locator('#view input[data-f^="search."]').count()===0, '条件に打ち込む欄はない');
+  const rentOpts = await page.$$eval('#f-search-maxRent option', o=>o.map(x=>x.textContent));
+  ok(rentOpts.includes('7.5万円以下') && rentOpts.includes('指定なし'), '「7.5万円以下」「指定なし」などから選べる');
+  await page.selectOption('#f-search-maxRent', '70000'); await page.waitForTimeout(700);
+  ok((await page.textContent('.condsum')).includes('¥70,000以下'), '選ぶとすぐ条件に反映される');
+  await page.selectOption('#f-search-maxRent', '75000'); await page.waitForTimeout(700);
+  await page.selectOption('#f-search-minArea', '45'); await page.waitForTimeout(500);
+  ok((await page.textContent('.condsum')).includes('45㎡以上'), '面積も選ぶと反映される');
+  await page.selectOption('#f-search-minArea', '40'); await page.waitForTimeout(500);
   const sp = puts.filter(p=>p.key==='settings').pop();
   ok(sp && sp.data.search && sp.data.search.cities.includes('shiojiri'), '条件も2人で共有される（GitHubに保存）');
   await page.click('[data-act="condToggle"]'); await page.waitForTimeout(200);
@@ -900,7 +910,7 @@ await run('おすすめ物件', {files:F0(), token:'github_pat_owner'}, async (p
   ok(ngt.includes('条件外') && ngt.includes('オーバー') && ngt.includes('駐車場あり'), '条件外の理由が出る（予算オーバー・必須の駐車場）');
   // 条件を変えると並びも変わる：上限を上げて駐車場を外す
   await page.click('[data-act="condToggle"]'); await page.waitForTimeout(250);
-  await page.fill('#f-search-maxRent', '100000'); await page.press('#f-search-maxRent','Tab'); await page.waitForTimeout(500);
+  await page.selectOption('#f-search-maxRent', '100000'); await page.waitForTimeout(500);
   const park = page.locator('[data-act="condFeat"][data-k="park"]');
   await park.click(); await page.waitForTimeout(300);   // 必須 → 外す
   ok(await page.locator('.home.ng').count()===0, '条件をゆるめると条件外がなくなる');
@@ -951,6 +961,58 @@ await run('候補物件も暗号化される', {files:F0(), token:'github_pat_ow
   const h = puts.filter(p=>p.key==='homes').pop();
   ok(h && h.data.enc==='aes-gcm', '候補物件も暗号化して保存する');
   ok(!JSON.stringify(h.data).includes('ひみつ'), '物件名が読み取れない');
+});
+
+// 37〜38) チャットの通知
+const spyNotes = ()=>{
+  window.__notes=[];
+  const rec=(t,o)=>window.__notes.push({title:t, body:(o||{}).body||'', hidden:document.hidden});
+  if (window.ServiceWorkerRegistration){ ServiceWorkerRegistration.prototype.showNotification=function(t,o){ rec(t,o); return Promise.resolve(); }; }
+  if (window.Notification){ const N=window.Notification; window.Notification=function(t,o){ rec(t,o); }; window.Notification.permission=N.permission; window.Notification.requestPermission=N.requestPermission.bind(N);
+    Object.defineProperty(window.Notification,'permission',{get:()=>N.permission}); }
+  localStorage.setItem('futari.me','0');
+};
+await run('チャットの通知', {files:{...F0(), chat:[{id:'old1', who:1, text:'前の発言', at:1000}]}, token:'github_pat_owner', perms:['notifications'], init:spyNotes}, async (page,{files})=>{
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(300);
+  ok((await page.textContent('.notirow')).includes('通知はオフ'), '最初は通知オフ');
+  await page.click('[data-act="notifyOn"]'); await page.waitForTimeout(300);
+  ok((await page.textContent('.notirow')).includes('通知オン'), 'ボタンでオンにできる');
+  ok(await page.evaluate(()=>localStorage.getItem('futari.notify'))==='1', 'この端末に覚える');
+  ok((await page.evaluate(()=>window.__notes.length))===0, '開いた時点で届いていた昔の発言では鳴らない');
+  // ほかのタブを見ているときに相手が書く
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  files.chat = [...files.chat, {id:'p1', who:1, text:'今日ごはんいる？', at:Date.now()+1000}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  const n1 = await page.evaluate(()=>window.__notes);
+  ok(n1.length===1 && n1[0].title.includes('からメッセージ') && n1[0].body==='今日ごはんいる？', '相手の新しい発言で通知が出る（名前と本文）');
+  ok(await page.locator('[data-tab="chat"] .tabdot').count()===1, 'チャットのタブにも印');
+  // 同じ発言では二度鳴らない
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(600);
+  ok((await page.evaluate(()=>window.__notes.length))===1, '同じ発言で二度は鳴らない');
+  // 自分の発言では鳴らない
+  files.chat = [...files.chat, {id:'m1', who:0, text:'自分の発言', at:Date.now()+2000}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(600);
+  ok((await page.evaluate(()=>window.__notes.length))===1, '自分の発言では鳴らない');
+  // チャットを開いて見ているときは鳴らさない
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(200);
+  files.chat = [...files.chat, {id:'p2', who:1, text:'見てる間の発言', at:Date.now()+3000}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  ok((await page.evaluate(()=>window.__notes.length))===1, 'チャットを見ている間は鳴らさない');
+  ok((await page.textContent('#chatwrap')).includes('見てる間の発言'), '（画面にはそのまま出る）');
+  // オフにすると鳴らない
+  await page.click('[data-act="notifyOff"]'); await page.waitForTimeout(200);
+  ok((await page.textContent('.notirow')).includes('通知はオフ'), 'オフにできる');
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  files.chat = [...files.chat, {id:'p3', who:1, text:'オフ中の発言', at:Date.now()+4000}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  ok((await page.evaluate(()=>window.__notes.length))===1, 'オフの間は鳴らない');
+});
+
+await run('通知から開くとチャット', {files:F0(), token:'github_pat_owner', hash:'?open=chat', init:()=>localStorage.setItem('futari.me','0')}, async (page)=>{
+  ok((await page.getAttribute('[data-tab="chat"]','aria-selected'))==='true', '?open=chat で開くとチャット画面になる');
+  ok(!page.url().includes('open=chat'), '開いたあとアドレスから消える（再読み込みで戻らない）');
+  const sw = readFileSync(join(ROOT,'sw.js'),'utf8');
+  ok(sw.includes('notificationclick') && sw.includes('./?open=chat'), '通知を押したときの動きが sw.js にある');
 });
 
 // 34) サンプル版

@@ -349,6 +349,7 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
 .daysep{align-self:center;font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);padding:2px 12px;border-radius:99px;margin:6px 0}
 .chatform{display:flex;gap:8px;margin-top:12px}
 .chatform .in{flex:1}
+.notirow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:13px}
 .tabdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-left:5px;vertical-align:middle}
 </style>
 
@@ -556,7 +557,8 @@ let homeFormOpen = false;   /* 物件の追加欄を開いているか */
 let homeEditId = null;      /* 直している物件のid */
 const emptyHome = () => ({url:"", title:"", city:"", rent:"", kanri:"", layout:"", areaM2:"", walk:"", age:"", btype:"", feats:[], memo:""});
 let homeDraft = emptyHome();
-let tab = "home";
+let tab = (()=>{ try{ return new URLSearchParams(location.search).get("open")==="chat"? "chat" : "home"; }catch(e){ return "home"; } })();
+if (tab==="chat"){ try{ history.replaceState(null, "", location.pathname+(DEMO? "?demo" : "")+location.hash); }catch(e){} }
 let editBudget = false;
 let openNotes = new Set();   /* メモ欄を開いている初期費用の項目 */
 let month = todayStr().slice(0,7);
@@ -637,7 +639,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-30a";
+const APP_VERSION = "2026-09-30b";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -662,6 +664,7 @@ let deletedHome = new Set();
 let deletedTodo = new Set();
 const MSG_MAX = 500;         /* 残す発言の数。古いものから落とす */
 const ME_KEY = "futari.me", SEEN_KEY = "futari.chatseen";
+const NOTIFY_KEY = "futari.notify", NOTIFIED_KEY = "futari.notified";
 let me = null;               /* この端末を使っているのはどちらか（0 or 1） */
 let chatSeen = 0;            /* ここまでは読んだ、という時刻 */
 let chatTimer = null;
@@ -936,6 +939,49 @@ function unreadCount(){
   if (me===null) return 0;
   return chat.filter(m=>m.who!==me && (m.at||0)>chatSeen).length;
 }
+/* ===== チャットの通知 =====
+   端末ごとにオン・オフ（futari.notify）。相手の新しい発言を読み込んだとき、
+   チャット画面を見ていなければ通知を出す。アプリが動いている間（裏に回っているときも含む）だけ届く。
+   アイコンの未読数（バッジ）も、対応している端末では付ける。 */
+let notifyOn = (()=>{ try{ return localStorage.getItem(NOTIFY_KEY)==="1"; }catch(e){ return false; } })();
+let notifiedAt = (()=>{ try{ return +localStorage.getItem(NOTIFIED_KEY)||0; }catch(e){ return 0; } })();
+const notifyOk = ()=> !DEMO && ("Notification" in window);
+const notifyLive = ()=> notifyOn && notifyOk() && Notification.permission==="granted" && me!==null;
+async function notifyNew(silent){
+  if (me===null) return;
+  const last=chat.length? Math.max(...chat.map(m=>m.at||0)) : 0;
+  if (!notifiedAt){ notifiedAt=last||Date.now(); try{ localStorage.setItem(NOTIFIED_KEY, String(notifiedAt)); }catch(e){} return; }   /* 初回は昔の発言で鳴らさない */
+  const fresh=chat.filter(m=>m.who!==me && (m.at||0)>notifiedAt);
+  if (!fresh.length) return;
+  notifiedAt=Math.max(notifiedAt, ...fresh.map(m=>m.at||0));
+  try{ localStorage.setItem(NOTIFIED_KEY, String(notifiedAt)); }catch(e){}
+  if (silent) return;   /* 開いた時点で届いていた分は、画面の印で分かるので鳴らさない */
+  if (!notifyLive() || (!document.hidden && tab==="chat")) return;
+  const m=fresh[fresh.length-1];
+  const title=(S.names[m.who]||"相手")+"からメッセージ"+(fresh.length>1? "（"+fresh.length+"件）" : "");
+  const opt={body:String(m.text||"").slice(0,100), tag:"futari-chat", renotify:true, icon:"icon-192.png", badge:"icon-192.png", data:{open:"chat"}};
+  try{
+    const reg=swReg || (("serviceWorker" in navigator)? await navigator.serviceWorker.getRegistration() : null);
+    if (reg && reg.showNotification) await reg.showNotification(title, opt); else new Notification(title, opt);
+  }catch(e){ try{ new Notification(title, opt); }catch(err){} }
+}
+function updateBadge(){
+  try{
+    const n=unreadCount();
+    if (n && navigator.setAppBadge) navigator.setAppBadge(n).catch(()=>{});
+    else if (!n && navigator.clearAppBadge) navigator.clearAppBadge().catch(()=>{});
+  }catch(e){}
+}
+function notifyRow(){
+  if (DEMO) return "";
+  if (!notifyOk()) return `<p class="note">この画面では通知が使えません。iPhoneは「ホーム画面に追加」したアプリから開くと使えます。</p>`;
+  if (Notification.permission==="denied") return `<p class="note">通知がブロックされています。端末（ブラウザ）の設定で、このアプリの通知を許可してください。</p>`;
+  return `<div class="notirow">
+    <span>${notifyLive()? "🔔 通知オン：相手の新しいメッセージを知らせます" : "🔕 通知はオフです"}</span>
+    ${notifyLive()? `<button class="btn small ghost" data-act="notifyOff">オフにする</button>` : `<button class="btn small primary" data-act="notifyOn">通知をオンにする</button>`}
+  </div>
+  <p class="note" style="margin-top:4px">アプリを開いている間（ほかのアプリに切り替えて裏にあるときも含む）に届きます。完全に閉じていると届きません。</p>`;
+}
 function markChatSeen(){
   const last=chat.length? Math.max(...chat.map(m=>m.at||0)) : 0;
   if (last>chatSeen){ chatSeen=last; try{ localStorage.setItem(SEEN_KEY, String(chatSeen)); }catch(e){} }
@@ -1184,6 +1230,7 @@ async function pull(){
     if (gl.missing){ sha.links=null; syncedLink=new Set(); } else { sha.links=gl.sha; const v=await open(gl.data, "links"); if(v!==undefined) changed=adoptLinks(v)||changed; }
     if (gh.missing){ sha.homes=null; syncedHome=new Set(); } else { sha.homes=gh.sha; const v=await open(gh.data, "homes"); if(v!==undefined) changed=adoptHomes(v)||changed; }
     if ((changed || locked!==wasLocked) && !editing()) render();
+    if (changed){ notifyNew(); updateBadge(); }
   }catch(e){ lastErr=e.message; }
   setSync();
 }
@@ -1266,7 +1313,7 @@ async function boot(){
     if (!gl.missing){ sha.links=gl.sha; const v=await open(gl.data, "links"); if(v!==undefined) adoptLinks(v); }
     const gh=await ghGet("homes").catch(()=>({missing:true}));
     if (!gh.missing){ sha.homes=gh.sha; const v=await open(gh.data, "homes"); if(v!==undefined) adoptHomes(v); }
-    render(); setSync(); startPoll();
+    render(); setSync(); startPoll(); notifyNew(true);
     if (invite.token && mode==="github" && !locked) toast("招待リンクからつなぎました");
     if (mode==="github" && !locked){ await pushSettings(); if(expenses.length) await pushExpenses(); if(chat.length) await pushChat(); if(todos.length) await pushTodos(); if(links.length) await pushLinks(); if(homes.length) await pushHomes(); }
   }catch(e){
@@ -1308,6 +1355,10 @@ async function setupSW(){
   if (!("serviceWorker" in navigator) || location.protocol==="file:") return;
   try{
     swReg=await navigator.serviceWorker.register("sw.js", {scope:"./", updateViaCache:"none"});
+    /* 通知を押したとき、開いている画面をチャットに切り替える */
+    navigator.serviceWorker.addEventListener("message", e=>{
+      if (e.data && e.data.type==="OPEN" && e.data.tab==="chat" && !locked){ tab="chat"; render(); window.scrollTo({top:0}); }
+    });
     navigator.serviceWorker.addEventListener("controllerchange", ()=>{
       /* 初めて取り付けたときは切り替えではないので、読み込み直さない */
       if (!hadController && !swapping) return;
@@ -1326,6 +1377,7 @@ async function setupSW(){
 }
 document.addEventListener("visibilitychange", ()=>{
   if (document.hidden) return;
+  if (tab==="chat"){ markChatSeen(); updateBadge(); }
   pull();
   if (swReg) swReg.update().catch(()=>{});
   applyUpdate();
@@ -1809,17 +1861,24 @@ function condSummary(){
     + m.map(k=>`<span class="m">必須 ${esc(FLABEL[k])}</span>`).join("")
     + w.map(k=>`<span class="w">◯ ${esc(FLABEL[k])}</span>`).join("");
 }
+/* 条件の選択肢（カナリーと同じく、打ち込まずに選ぶ） */
+const RENT_OPTS = [0,40000,45000,50000,55000,60000,65000,70000,75000,80000,85000,90000,95000,100000,110000,120000,130000,150000];
+const AREA_OPTS = [0,20,25,30,35,40,45,50,55,60,65,70,80];
+/* 以前に打ち込んだ半端な値も、選択肢に混ぜて消さない */
+const withCur = (list,cur)=> (+cur && !list.includes(+cur))? list.concat([+cur]).sort((a,b)=>a-b) : list;
+const manYen = v=> (v/10000)+"万円";
 function condEditor(){
   const c=S.search;
   const opt=(vals,cur,fmt)=>vals.map(v=>`<option value="${v}" ${+cur===v?"selected":""}>${fmt(v)}</option>`).join("");
   return `<div class="condgrid">
     <div class="fld"><span class="lbl">エリア（複数可）</span>
       <div class="chipset">${Object.entries(CITIES).map(([k,v])=>`<button type="button" class="chip" data-act="condCity" data-k="${k}" aria-pressed="${c.cities.includes(k)}">${esc(v.label)}</button>`).join("")}</div></div>
-    <label class="fld"><span class="lbl">賃料の上限（管理費・共益費こみ）</span>${yenInput("search.maxRent", c.maxRent, 'step="1000"')}</label>
+    <label class="fld"><span class="lbl">賃料の上限（管理費・共益費こみ）</span>
+      <select class="in" id="f-search-maxRent" data-f="search.maxRent" data-num>${opt(withCur(RENT_OPTS,c.maxRent),c.maxRent,v=>v? manYen(v)+"以下" : "指定なし")}</select></label>
     <div class="fld"><span class="lbl">間取り（複数可）</span>
       <div class="chipset">${LAYOUTS.map(l=>`<button type="button" class="chip" data-act="condLayout" data-k="${esc(l)}" aria-pressed="${c.layouts.includes(l)}">${esc(l)}</button>`).join("")}</div></div>
-    <label class="fld"><span class="lbl">専有面積（㎡以上）</span>
-      <input class="in" type="number" inputmode="numeric" min="0" step="1" id="f-search-minArea" data-f="search.minArea" data-num value="${+c.minArea||0}"></label>
+    <label class="fld"><span class="lbl">専有面積</span>
+      <select class="in" id="f-search-minArea" data-f="search.minArea" data-num>${opt(withCur(AREA_OPTS,c.minArea),c.minArea,v=>v? v+"㎡以上" : "指定なし")}</select></label>
     <label class="fld"><span class="lbl">駅徒歩</span>
       <select class="in" id="f-search-walk" data-f="search.walk" data-num>${opt([0,5,10,15,20,30],c.walk,v=>v? v+"分以内" : "指定なし（車が前提）")}</select></label>
     <label class="fld"><span class="lbl">築年数</span>
@@ -2385,6 +2444,7 @@ function viewChat(){
     <div class="row between"><div><h2>チャット</h2>
       <p class="sub">${esc(S.names[me])}として書き込みます${pass? "。中身は合言葉で暗号化されます" : ""}</p></div>
       <button class="btn ghost small" data-act="switchMe">切り替え</button></div>
+    ${notifyRow()}
     <div class="chatwrap" id="chatwrap">${rows}</div>
     <form class="chatform" id="chatForm" autocomplete="off">
       <input class="in" id="chatText" maxlength="500" placeholder="メッセージを入力" aria-label="メッセージ">
@@ -2409,8 +2469,9 @@ function render(){
                 tab==="chat"?viewChat(): viewLog());
   if (tab==="chat"){
     const w=$("#chatwrap"); if(w) w.scrollTop=w.scrollHeight;
-    markChatSeen();
+    if (!document.hidden) markChatSeen();
   }
+  updateBadge();
   growAll();
 }
 
@@ -2624,6 +2685,14 @@ document.addEventListener("click", async e=>{
     if (!DEMO) return;
     if (!confirm("見本データを最初の状態に戻しますか？（このブラウザで触った内容は消えます）")) return;
     localStorage.clearAll(); seedDemo(true); location.reload(); return; }
+  if (act==="notifyOn"){
+    if (!notifyOk()) return;
+    let p=Notification.permission;
+    if (p!=="granted"){ try{ p=await Notification.requestPermission(); }catch(err){ p="denied"; } }
+    if (p!=="granted"){ render(); toast("通知が許可されませんでした"); return; }
+    notifyOn=true; try{ localStorage.setItem(NOTIFY_KEY,"1"); }catch(err){}
+    render(); toast("通知をオンにしました"); return; }
+  if (act==="notifyOff"){ notifyOn=false; try{ localStorage.removeItem(NOTIFY_KEY); }catch(err){} render(); toast("通知をオフにしました"); return; }
   if (act==="condToggle"){ condOpen=!condOpen; render(); return; }
   if (act==="condCity" || act==="condLayout" || act==="condType"){
     const key={condCity:"cities", condLayout:"layouts", condType:"types"}[act], k=t.dataset.k, arr=S.search[key];
