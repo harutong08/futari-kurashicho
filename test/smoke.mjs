@@ -65,7 +65,7 @@ async function run(name, {files, token, pass, repoStatus, hash, clipboard}, body
     urls.push(m+' '+u);
     if (STRAY_SLASH.test(u)) return route.fulfill({status:400, body:'{"message":"Bad Request"}'});
     if (m==='OPTIONS') return route.fulfill({status:204, headers:CORS});
-    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : x.includes('links') ? 'links' : 'expenses';
+    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : x.includes('links') ? 'links' : x.includes('homes') ? 'homes' : 'expenses';
     if (m==='PUT'){ const key = keyOf(u);
       const b = JSON.parse(req.postData()||'{}');
       puts.push({key, data: JSON.parse(Buffer.from(b.content,'base64').toString('utf8'))});
@@ -419,10 +419,13 @@ await run('やることリスト', {files:{settings:null, expenses:null, chat:nu
   ok((await page.textContent('.todos')).includes(first.replace('＋ ','')), '押すと追加される');
   // 自分で書いて追加（期限つき）
   await page.fill('#todoText', '内見の予約をする');
-  await page.fill('#todoDue', '2026-09-30');
+  // 期限は「今日から30日後」にする（日付を固定すると、その日になった途端に3日以内扱いになって試験が崩れる）
+  const far = await page.evaluate(()=>{ const x=new Date(); x.setDate(x.getDate()+30);
+    return {iso:x.getFullYear()+'-'+String(x.getMonth()+1).padStart(2,'0')+'-'+String(x.getDate()).padStart(2,'0'), md:(x.getMonth()+1)+'/'+x.getDate()}; });
+  await page.fill('#todoDue', far.iso);
   await page.click('#todoForm button[type=submit]'); await page.waitForTimeout(800);
   ok((await page.textContent('.todos')).includes('内見の予約をする'), '書いたものが追加される');
-  ok((await page.textContent('.todos')).includes('9/30'), '期限が出る');
+  ok((await page.textContent('.todos')).includes(far.md), '期限が出る');
   // 期限の切迫ぐあいで色が変わる
   const mk = async (text, offsetDays)=>{
     const d = offsetDays===null ? '' : await page.evaluate(n=>{
@@ -449,7 +452,7 @@ await run('やることリスト', {files:{settings:null, expenses:null, chat:nu
   }), '期限切れの行は背景と左の線が変わる');
   ok((await page.inputValue('#todoText'))==='', '追加すると入力欄が空になる');
   const t = puts.filter(p=>p.key==='todos').pop();
-  ok(t && t.data.some(x=>x.text==='内見の予約をする' && x.due==='2026-09-30'), 'GitHubに書き込まれる');
+  ok(t && t.data.some(x=>x.text==='内見の予約をする' && x.due===far.iso), 'GitHubに書き込まれる');
   // チェックすると終わり扱いになって下に移る
   await page.locator('.todos input[type=checkbox]').last().check(); await page.waitForTimeout(900);
   ok(await page.locator('.todos li.st-done').count()===1, 'チェックすると終わり表示になる');
@@ -821,6 +824,135 @@ await run('参考リンクも暗号化される', {files:{settings:null, expense
   ok(!JSON.stringify(l.data).includes('himitsu'), 'URLが読み取れない');
 });
 
+// 35〜36) おすすめ物件
+const F0 = ()=>({settings:null, expenses:null, chat:null, todos:null, links:null, homes:null});
+async function addHome(page, h){
+  await page.click('[data-act="homeFormOpen"]'); await page.waitForTimeout(250);
+  const f = page.locator('#homeForm');
+  if (h.url) await f.locator('[data-hd="url"]').fill(h.url);
+  if (h.title) await f.locator('[data-hd="title"]').fill(h.title);
+  if (h.city) await f.locator('[data-hd="city"]').selectOption(h.city);
+  if (h.rent!=null) await f.locator('[data-hd="rent"]').fill(String(h.rent));
+  if (h.kanri!=null) await f.locator('[data-hd="kanri"]').fill(String(h.kanri));
+  if (h.layout) await f.locator('[data-hd="layout"]').selectOption(h.layout);
+  if (h.areaM2!=null) await f.locator('[data-hd="areaM2"]').fill(String(h.areaM2));
+  for (const k of (h.feats||[])) await f.locator(`[data-act="hdFeat"][data-k="${k}"]`).click();
+  await f.locator('button[type=submit]').click(); await page.waitForTimeout(700);
+}
+await run('おすすめ物件', {files:F0(), token:'github_pat_owner'}, async (page,{puts,files})=>{
+  page.on('dialog', d=>d.accept());
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(350);
+  ok(await page.locator('.condsum').count()===1, '物件タブに条件のまとめが出る');
+  const sum0 = await page.textContent('.condsum');
+  ok(sum0.includes('松本') && sum0.includes('2LDK') && sum0.includes('必須 2人入居可'), '最初の条件（松本・2LDKなど・2人入居可が必須）');
+  // 探しに行くリンク
+  const canary = page.locator('a[href^="https://web.canary-app.jp/chintai/nagano/cities/"]');
+  ok(await canary.count()===1, '選んだエリアのカナリーへのリンクがある');
+  ok(await canary.getAttribute('target')==='_blank' && (await canary.getAttribute('rel')||'').includes('noopener'), '新しいタブで安全に開く');
+  ok(await page.locator('a[href="https://suumo.jp/chintai/nagano/sc_matsumoto/"]').count()===1, 'SUUMOの松本市ページへのリンクもある');
+  // 条件を変える
+  await page.click('[data-act="condToggle"]'); await page.waitForTimeout(250);
+  await page.click('[data-act="condCity"][data-k="shiojiri"]'); await page.waitForTimeout(400);
+  ok((await page.textContent('.condsum')).includes('塩尻'), 'エリアを足せる');
+  ok(await page.locator('a[href^="https://web.canary-app.jp/"]').count()===2, '足したエリアの探すリンクも増える');
+  const featBtn = ()=>page.locator('[data-act="condFeat"][data-k="oidaki"]');
+  const st0 = await featBtn().getAttribute('class');
+  ok(st0.includes('want'), '追い焚きは最初「あれば嬉しい」');
+  await featBtn().click(); await page.waitForTimeout(300);
+  ok((await featBtn().getAttribute('class')).includes('must'), 'もう一度押すと「必須」');
+  await featBtn().click(); await page.waitForTimeout(300);
+  ok(!/want|must/.test(await featBtn().getAttribute('class')), 'さらに押すと外れる');
+  await featBtn().click(); await page.waitForTimeout(300);   // 「あれば嬉しい」に戻す
+  await page.fill('#f-search-maxRent', '75000'); await page.press('#f-search-maxRent','Tab'); await page.waitForTimeout(700);
+  const sp = puts.filter(p=>p.key==='settings').pop();
+  ok(sp && sp.data.search && sp.data.search.cities.includes('shiojiri'), '条件も2人で共有される（GitHubに保存）');
+  await page.click('[data-act="condToggle"]'); await page.waitForTimeout(200);
+  ok(await page.locator('.home').count()===0 && (await page.textContent('#view')).includes('まだ候補がありません'), '最初は候補なし');
+  // 追加：共有シートの「文字＋URL」を貼る
+  await page.click('[data-act="homeFormOpen"]'); await page.waitForTimeout(250);
+  await page.locator('#homeForm [data-hd="url"]').fill('グリーンハイツ 201 https://web.canary-app.jp/chintai/rooms/abc123/');
+  ok((await page.locator('#homeForm [data-hd="url"]').inputValue())==='https://web.canary-app.jp/chintai/rooms/abc123/', 'URLだけ取り出す');
+  ok((await page.locator('#homeForm [data-hd="title"]').inputValue())==='グリーンハイツ 201', '残りの文字は物件名に回る');
+  await page.locator('#homeForm [data-hd="city"]').selectOption('matsumoto');
+  await page.locator('#homeForm [data-hd="rent"]').fill('66000');
+  await page.locator('#homeForm [data-hd="kanri"]').fill('3000');
+  await page.locator('#homeForm [data-hd="layout"]').selectOption('2LDK');
+  await page.locator('#homeForm [data-hd="areaM2"]').fill('52.5');
+  for (const k of ['two','park','sepbath','oidaki']) await page.locator(`#homeForm [data-act="hdFeat"][data-k="${k}"]`).click();
+  ok(await page.locator('#homeForm [data-act="hdFeat"][data-k="two"]').getAttribute('aria-pressed')==='true', '当てはまるものを押すと選ばれる');
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(150); await page.click('[data-tab="bukken"]'); await page.waitForTimeout(250);
+  ok((await page.locator('#homeForm [data-hd="title"]').inputValue())==='グリーンハイツ 201', 'タブを移っても書きかけが消えない');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(800);
+  ok(await page.locator('.home').count()===1 && await page.locator('#homeForm').count()===0, '候補に入り、入力欄が閉じる');
+  const h1 = puts.filter(p=>p.key==='homes').pop();
+  ok(h1 && h1.data[0].title==='グリーンハイツ 201' && h1.data[0].rent===66000 && h1.data[0].areaM2===52.5, 'GitHubに保存される');
+  ok(await page.locator('.home .ttl a').first().getAttribute('href')==='https://web.canary-app.jp/chintai/rooms/abc123/', '物件名を押すと物件ページに飛べる');
+  // 条件外（予算オーバー・駐車場なし）
+  await addHome(page, {title:'高いマンション', city:'matsumoto', rent:90000, kanri:5000, layout:'2LDK', areaM2:60, feats:['two']});
+  // 設備が多い物件（こちらが1位になるはず）
+  await addHome(page, {title:'設備充実アパート', city:'shiojiri', rent:64000, kanri:2000, layout:'2DK', areaM2:48, feats:['two','park','sepbath','washroom','oidaki','citygas','cold']});
+  const order = await page.$$eval('.home .ttl', a=>a.map(x=>x.textContent.trim()));
+  ok(order[0]==='設備充実アパート' && order[1]==='グリーンハイツ 201' && order[2]==='高いマンション', 'おすすめ順に並ぶ（条件外は最後）：'+order.join(' / '));
+  ok((await page.locator('.home').first().locator('.rank').textContent()).includes('1位'), '1位の表示');
+  const ng = page.locator('.home.ng');
+  ok(await ng.count()===1, '条件外は1件');
+  const ngt = await ng.textContent();
+  ok(ngt.includes('条件外') && ngt.includes('オーバー') && ngt.includes('駐車場あり'), '条件外の理由が出る（予算オーバー・必須の駐車場）');
+  // 条件を変えると並びも変わる：上限を上げて駐車場を外す
+  await page.click('[data-act="condToggle"]'); await page.waitForTimeout(250);
+  await page.fill('#f-search-maxRent', '100000'); await page.press('#f-search-maxRent','Tab'); await page.waitForTimeout(500);
+  const park = page.locator('[data-act="condFeat"][data-k="park"]');
+  await park.click(); await page.waitForTimeout(300);   // 必須 → 外す
+  ok(await page.locator('.home.ng').count()===0, '条件をゆるめると条件外がなくなる');
+  await page.click('[data-act="condToggle"]'); await page.waitForTimeout(200);
+  // この家賃で試算
+  await page.locator('.home', {hasText:'グリーンハイツ 201'}).locator('[data-act="homeUse"]').click(); await page.waitForTimeout(700);
+  const sb = puts.filter(p=>p.key==='settings').pop().data;
+  ok(sb.budget.find(b=>b.id==='rent').amt===66000 && sb.budget.find(b=>b.id==='kanri').amt===3000, '「この家賃で試算」で予算の家賃・管理費が変わる');
+  // お気に入り
+  const g = ()=>page.locator('.home', {hasText:'グリーンハイツ 201'});
+  await g().locator('[data-act="homeFav"]').click(); await page.waitForTimeout(700);
+  ok((await g().locator('[data-act="homeFav"]').textContent())==='★', '★を付けられる');
+  ok(puts.filter(p=>p.key==='homes').pop().data.find(x=>x.title==='グリーンハイツ 201').fav===true, '★も保存される');
+  // 直す
+  await g().locator('[data-act="homeEdit"]').click(); await page.waitForTimeout(300);
+  ok((await page.locator('#homeForm [data-hd="rent"]').inputValue())==='66000', '直すと今の値が入った状態で開く');
+  await page.locator('#homeForm [data-hd="rent"]').fill('61000');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(800);
+  const h2 = puts.filter(p=>p.key==='homes').pop().data;
+  ok(h2.length===3 && h2.find(x=>x.title==='グリーンハイツ 201').rent===61000, '直した内容で上書き（増えない）');
+  ok(h2.find(x=>x.title==='グリーンハイツ 201').fav===true, '直しても★は残る');
+  // 相手が足した分を取り込む
+  files.homes = [...h2, {id:'home-partner', title:'相手が見つけた家', city:'azumino', rent:58000, kanri:0, layout:'3DK', areaM2:62, walk:'', age:'', btype:'', feats:['two','park'], memo:'', at:1, by:1}];
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(150);
+  await page.click('[data-act="ghSync"]'); await page.waitForTimeout(800);
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  ok((await page.textContent('.homes')).includes('相手が見つけた家'), '相手が足した物件が出る');
+  // 消す
+  await page.locator('.home', {hasText:'高いマンション'}).locator('[data-act="homeDel"]').click(); await page.waitForTimeout(800);
+  const h3 = puts.filter(p=>p.key==='homes').pop().data;
+  ok(!h3.some(x=>x.title==='高いマンション') && h3.some(x=>x.id==='home-partner'), '消したことがGitHubに反映され、相手の分は残る');
+  // 危ないURLはリンクにしない
+  await page.click('[data-act="homeFormOpen"]'); await page.waitForTimeout(250);
+  await page.locator('#homeForm [data-hd="url"]').fill('javascript:alert(1)');
+  await page.locator('#homeForm [data-hd="title"]').fill('あやしい');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(500);
+  ok(!(await page.textContent('.homes')).includes('あやしい'), 'javascript: のURLは入らない');
+  ok(await page.locator('.homes a[href^="javascript"]').count()===0, '危ないリンクは作らない');
+});
+
+await run('候補物件も暗号化される', {files:F0(), token:'github_pat_owner'}, async (page,{puts})=>{
+  const answers=[PASS,PASS];
+  page.on('dialog', d=>d.accept(answers.shift() ?? ''));
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  await addHome(page, {title:'ひみつ荘', city:'matsumoto', rent:60000});
+  await page.click('[data-tab="budget"]'); await page.waitForTimeout(200);
+  await page.click('[data-act="passSet"]'); await page.waitForTimeout(3000);
+  const h = puts.filter(p=>p.key==='homes').pop();
+  ok(h && h.data.enc==='aes-gcm', '候補物件も暗号化して保存する');
+  ok(!JSON.stringify(h.data).includes('ひみつ'), '物件名が読み取れない');
+});
+
 // 34) サンプル版
 {
   const ctx = await browser.newContext();
@@ -851,6 +983,9 @@ await run('参考リンクも暗号化される', {files:{settings:null, expense
   await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
   ok(await page.locator('.refs .ref').count()===3, '参考リンクの見本が入っている');
   ok(await page.locator('.item.chk.off').count()>=1, '用意済みの見本もある');
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  ok(await page.locator('.home').count()===4, '候補物件の見本が入っている');
+  ok(await page.locator('.home.ng').count()>=1, '条件外の見本もある');
   await page.click('[data-tab="log"]'); await page.waitForTimeout(300);
   ok(await page.locator('.explist li').count()>=5, '家計簿に今月の見本が入っている');
   await page.click('[data-tab="chat"]'); await page.waitForTimeout(300);
