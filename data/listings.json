@@ -1,0 +1,35 @@
+[
+ {
+  "id": "13c0c00414fffeb6",
+  "url": "https://suumo.jp/chintai/jnc_000102528722/",
+  "reqAt": 1790863209000,
+  "at": 1790863226531,
+  "ok": true,
+  "site": "suumo",
+  "title": "フレシール",
+  "city": "matsumoto",
+  "rent": 65000,
+  "kanri": 4100,
+  "shiki": 0,
+  "rei": 90000,
+  "layout": "1LDK",
+  "areaM2": 50.53,
+  "walk": 26,
+  "age": 11,
+  "btype": "apart",
+  "floor": 2,
+  "feats": [
+   "sepbath",
+   "washroom",
+   "oidaki",
+   "dryer",
+   "cold",
+   "washer",
+   "aircon",
+   "net",
+   "noguar",
+   "park",
+   "floor2"
+  ]
+ }
+]
