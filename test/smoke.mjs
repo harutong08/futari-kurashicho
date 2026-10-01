@@ -851,11 +851,18 @@ await run('おすすめ物件', {files:F0(), token:'github_pat_owner'}, async (p
   ok(await canary.count()===1, '選んだエリアのカナリーへのリンクがある');
   ok(await canary.getAttribute('target')==='_blank' && (await canary.getAttribute('rel')||'').includes('noopener'), '新しいタブで安全に開く');
   ok(await page.locator('a[href="https://suumo.jp/chintai/nagano/sc_matsumoto/"]').count()===1, 'SUUMOの松本市ページへのリンクもある');
+  const sites = await page.$$eval('.siterow a', a=>a.map(x=>x.getAttribute('href')));
+  ok(sites.length===6 && ['https://www.homes.co.jp/chintai/nagano/matsumoto-city/list/','https://www.athome.co.jp/chintai/nagano/matsumoto-city/list/',
+      'https://www.chintai.net/nagano/area/20202/list/','https://realestate.yahoo.co.jp/rent/search/03/20/20202/'].every(u=>sites.includes(u)),
+     "HOME'S・アットホーム・CHINTAI・Yahoo!不動産も松本市のページで並ぶ（6サイト）");
+  ok(await page.$$eval('.siterow a', a=>a.every(x=>x.target==='_blank' && x.rel.includes('noopener'))), 'どのサイトも新しいタブで安全に開く');
+  ok(await page.locator('#safariOpen').count()===0, 'iPhoneのアプリ以外では「Safariで開く」の切り替えは出ない');
   // 条件を変える
   await page.click('[data-act="condToggle"]'); await page.waitForTimeout(250);
   await page.click('[data-act="condCity"][data-k="shiojiri"]'); await page.waitForTimeout(400);
   ok((await page.textContent('.condsum')).includes('塩尻'), 'エリアを足せる');
   ok(await page.locator('a[href^="https://web.canary-app.jp/"]').count()===2, '足したエリアの探すリンクも増える');
+  ok(await page.locator('a[href="https://www.chintai.net/nagano/area/20215/list/"]').count()===1, '塩尻市はCHINTAIなども塩尻市のページ');
   const featBtn = ()=>page.locator('[data-act="condFeat"][data-k="oidaki"]');
   const st0 = await featBtn().getAttribute('class');
   ok(st0.includes('want'), '追い焚きは最初「あれば嬉しい」');
@@ -1013,6 +1020,39 @@ await run('通知から開くとチャット', {files:F0(), token:'github_pat_ow
   ok(!page.url().includes('open=chat'), '開いたあとアドレスから消える（再読み込みで戻らない）');
   const sw = readFileSync(join(ROOT,'sw.js'),'utf8');
   ok(sw.includes('notificationclick') && sw.includes('./?open=chat'), '通知を押したときの動きが sw.js にある');
+});
+
+// 39) iPhoneのホーム画面アプリでは、サイトをSafariで開く
+const asIPhoneApp = ()=>{
+  Object.defineProperty(navigator,'userAgent',{get:()=>'Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148'});
+  Object.defineProperty(navigator,'standalone',{get:()=>true});
+  window.__safari=[]; window.__opened=[];
+  const click=HTMLAnchorElement.prototype.click;
+  HTMLAnchorElement.prototype.click=function(){ if (String(this.href).startsWith('x-safari-')){ window.__safari.push(this.href); return; } return click.call(this); };
+  window.open=(u)=>{ window.__opened.push(u); return null; };
+};
+await run('Safariで開く', {files:F0(), token:'github_pat_owner', init:asIPhoneApp}, async (page)=>{
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  ok(await page.locator('#safariOpen').isChecked(), 'iPhoneのアプリでは「Safariで開く」が最初からオン');
+  await page.locator('.siterow a[data-site="homes"]').first().click(); await page.waitForTimeout(200);
+  const sf = await page.evaluate(()=>window.__safari);
+  ok(sf.length===1 && sf[0]==='x-safari-https://www.homes.co.jp/chintai/nagano/matsumoto-city/list/', 'サイトのボタンは x-safari-https:// でSafariに渡す');
+  ok(!page.url().includes('homes.co.jp'), 'アプリの画面はそのまま');
+  await page.waitForTimeout(1300);
+  ok((await page.evaluate(()=>window.__opened)).length===1, 'Safariに渡せず画面が残ったときは、アプリの中で開き直す');
+  // 参考リンクも同じ
+  await page.click('[data-tab="initial"]'); await page.waitForTimeout(300);
+  await page.fill('#refUrl', 'https://example.com/a');
+  await page.click('#refGo'); await page.waitForTimeout(200);
+  ok((await page.evaluate(()=>window.__safari)).includes('x-safari-https://example.com/a'), '参考リンクの「開く」もSafariで');
+  // 切り替えをオフにすると今までどおり
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  await page.uncheck('#safariOpen'); await page.waitForTimeout(200);
+  ok(await page.evaluate(()=>localStorage.getItem('futari.safari'))==='0', 'オフにした設定を覚える');
+  const before = (await page.evaluate(()=>window.__safari)).length;
+  const [pop] = await Promise.all([page.waitForEvent('popup', {timeout:3000}).catch(()=>null), page.locator('.siterow a[data-site="suumo"]').first().click()]);
+  ok((await page.evaluate(()=>window.__safari)).length===before, 'オフならSafariに渡さない');
+  if (pop) await pop.close();
 });
 
 // 34) サンプル版

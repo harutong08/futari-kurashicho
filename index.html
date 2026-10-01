@@ -256,8 +256,6 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
 .condsum span.w{background:var(--good-soft);color:var(--good);border-color:transparent}
 .condgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:12px}
 .condgrid .fld>span.lbl{font-size:12px;color:var(--muted);font-weight:500}
-.search-links{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
-.search-links a{text-decoration:none}
 .homes{list-style:none;margin:12px 0 0;padding:0;display:flex;flex-direction:column;gap:10px}
 .home{border:1px solid var(--line);border-left:5px solid var(--accent);border-radius:14px;padding:12px 14px;background:var(--surface)}
 .home.top1{border-left-color:var(--bad)}
@@ -349,6 +347,9 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
 .daysep{align-self:center;font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);padding:2px 12px;border-radius:99px;margin:6px 0}
 .chatform{display:flex;gap:8px;margin-top:12px}
 .chatform .in{flex:1}
+.siterow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
+.siterow a{text-decoration:none;color:var(--accent);font-weight:600}
+.siterow .city{font-size:13px;color:var(--muted);min-width:4.5em}
 .notirow{display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;margin:10px 0 0;padding:10px 12px;border-radius:12px;background:var(--surface-2);font-size:13px}
 .tabdot{display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--bad);margin-left:5px;vertical-align:middle}
 </style>
@@ -495,17 +496,24 @@ const DEFAULT = {
 };
 
 /* 物件探しで使う表 */
+/* slug はサイトのURLに出てくる市の名前、code は市区町村コード（松本20202・塩尻20215・安曇野20220） */
 const CITIES = {
-  matsumoto:{label:"松本市",
-    canary:"https://web.canary-app.jp/chintai/nagano/cities/bc7e809b-428f-4436-9b8c-8e0124a3c954/",
-    suumo:"https://suumo.jp/chintai/nagano/sc_matsumoto/"},
-  shiojiri:{label:"塩尻市",
-    canary:"https://web.canary-app.jp/chintai/nagano/cities/97de37e8-6882-4f14-87dd-18a0deed2b20/",
-    suumo:"https://suumo.jp/chintai/nagano/sc_shiojiri/"},
-  azumino:{label:"安曇野市",
-    canary:"https://web.canary-app.jp/chintai/nagano/cities/d6879e24-0b24-4420-991e-a5e6859f184f/",
-    suumo:"https://suumo.jp/chintai/nagano/sc_azumino/"}
+  matsumoto:{label:"松本市", slug:"matsumoto", code:"20202",
+    canary:"https://web.canary-app.jp/chintai/nagano/cities/bc7e809b-428f-4436-9b8c-8e0124a3c954/"},
+  shiojiri:{label:"塩尻市", slug:"shiojiri", code:"20215",
+    canary:"https://web.canary-app.jp/chintai/nagano/cities/97de37e8-6882-4f14-87dd-18a0deed2b20/"},
+  azumino:{label:"安曇野市", slug:"azumino", code:"20220",
+    canary:"https://web.canary-app.jp/chintai/nagano/cities/d6879e24-0b24-4420-991e-a5e6859f184f/"}
 };
+/* 探しに行く先。どれも市ごとの賃貸一覧ページ（2026年10月に開けることを確認） */
+const SITES = [
+  {k:"canary",  label:"カナリー",      url:c=>c.canary},
+  {k:"suumo",   label:"SUUMO",        url:c=>"https://suumo.jp/chintai/nagano/sc_"+c.slug+"/"},
+  {k:"homes",   label:"HOME'S",       url:c=>"https://www.homes.co.jp/chintai/nagano/"+c.slug+"-city/list/"},
+  {k:"athome",  label:"アットホーム",  url:c=>"https://www.athome.co.jp/chintai/nagano/"+c.slug+"-city/list/"},
+  {k:"chintai", label:"CHINTAI",      url:c=>"https://www.chintai.net/nagano/area/"+c.code+"/list/"},
+  {k:"yahoo",   label:"Yahoo!不動産",  url:c=>"https://realestate.yahoo.co.jp/rent/search/03/20/"+c.code+"/"}
+];
 const LAYOUTS = ["1LDK","2K","2DK","2LDK","3K","3DK","3LDK","4K以上"];
 const BTYPES = {mansion:"マンション", apart:"アパート", house:"一戸建て・テラスハウス"};
 /* こだわり条件。カナリーの人気条件（洗面所独立・2人入居相談・追い炊き・浴室乾燥機・ペット相談可 など）に、
@@ -639,7 +647,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-09-30b";
+const APP_VERSION = "2026-10-01a";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -665,6 +673,36 @@ let deletedTodo = new Set();
 const MSG_MAX = 500;         /* 残す発言の数。古いものから落とす */
 const ME_KEY = "futari.me", SEEN_KEY = "futari.chatseen";
 const NOTIFY_KEY = "futari.notify", NOTIFIED_KEY = "futari.notified";
+/* ===== リンクをSafariで開く =====
+   iPhoneの「ホーム画面に追加」したアプリでは、外のサイトがアプリの中の簡易ブラウザで開く。
+   そこで x-safari-https:// という形に変えて、Safari本体に渡す（iOS 17以降の仕組み）。
+   渡せなかったとき（画面がそのまま残ったとき）は、これまでどおりアプリの中で開く。 */
+const SAFARI_KEY = "futari.safari";
+const IOS_APP = (()=>{ try{
+  const ios=/iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform==="MacIntel" && navigator.maxTouchPoints>1);
+  const standalone=navigator.standalone===true || (window.matchMedia && matchMedia("(display-mode: standalone)").matches);
+  return ios && standalone; }catch(e){ return false; } })();
+let safariOpen = (()=>{ try{ return localStorage.getItem(SAFARI_KEY)!=="0"; }catch(e){ return true; } })();
+function openInSafari(u){
+  let left=false;
+  const onHide=()=>{ if (document.hidden) left=true; };
+  document.addEventListener("visibilitychange", onHide);
+  const a=document.createElement("a");
+  a.href="x-safari-"+u; a.rel="noopener noreferrer";
+  a.click();
+  setTimeout(()=>{
+    document.removeEventListener("visibilitychange", onHide);
+    if (!left && !document.hidden) window.open(u, "_blank", "noopener");
+  }, 1200);
+}
+document.addEventListener("click", e=>{
+  if (!IOS_APP || !safariOpen) return;
+  const a=e.target.closest && e.target.closest('a[target="_blank"]'); if (!a) return;
+  const href=a.getAttribute("href")||"";
+  if (!/^https?:\/\//i.test(href)) return;
+  e.preventDefault();
+  openInSafari(href);
+}, true);
 let me = null;               /* この端末を使っているのはどちらか（0 or 1） */
 let chatSeen = 0;            /* ここまでは読んだ、という時刻 */
 let chatTimer = null;
@@ -1970,11 +2008,9 @@ function viewBukken(){
       ${homeFormOpen? "" : `<button class="btn small primary" data-act="homeFormOpen">＋ 物件を追加</button>`}</div>
     <div class="callout" style="margin-top:10px;font-size:13px">
       <b>探しに行く</b>（条件は各サイトの画面で指定してください）
-      <div class="search-links" style="margin-top:8px">
-        ${cities.map(k=>`<span style="font-size:13px;color:var(--muted);min-width:4.5em">${esc(CITIES[k].label)}</span>
-          <a class="btn small" href="${CITIES[k].canary}" target="_blank" rel="noopener noreferrer">カナリー ↗</a>
-          <a class="btn small" href="${CITIES[k].suumo}" target="_blank" rel="noopener noreferrer">SUUMO ↗</a>`).join('<span style="flex-basis:100%;height:0"></span>')}
-      </div>
+      ${cities.map(k=>`<div class="siterow"><span class="city">${esc(CITIES[k].label)}</span>
+        ${SITES.map(x=>`<a class="btn small" data-site="${x.k}" href="${esc(x.url(CITIES[k]))}" target="_blank" rel="noopener noreferrer">${esc(x.label)} ↗</a>`).join("")}</div>`).join("")}
+      ${IOS_APP? `<label class="toggle" style="margin-top:8px;font-size:13px"><input type="checkbox" id="safariOpen" ${safariOpen?"checked":""}> サイトはSafariで開く（ホーム画面のアプリから開いたとき）</label>` : ""}
       <p class="note" style="margin:8px 0 0">気になる物件があったら、そのサイトの「共有」でURLをコピーして、ここの「物件を追加」に貼ってください。
         物件情報を自動で集めてくることはできません（各サイトにデータを受け取る仕組みがないため）。</p>
     </div>
@@ -2841,6 +2877,7 @@ document.addEventListener("change", e=>{
     return;
   }
   if (el.dataset && el.dataset.hd){ homeDraft[el.dataset.hd]=el.value; return; }
+  if (el.id==="safariOpen"){ safariOpen=el.checked; try{ localStorage.setItem(SAFARI_KEY, safariOpen? "1" : "0"); }catch(err){} return; }
   if (el.id==="rcpt"){ const f=el.files && el.files[0]; el.value=""; if(f) readReceipt(f); return; }
   if (el.id==="logMonth"){ if(el.value){ month=el.value; render(); } return; }
   if (el.dataset && el.dataset.ov){
