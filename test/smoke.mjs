@@ -852,9 +852,10 @@ await run('おすすめ物件', {files:F0(), token:'github_pat_owner'}, async (p
   ok(await canary.getAttribute('target')==='_blank' && (await canary.getAttribute('rel')||'').includes('noopener'), '新しいタブで安全に開く');
   ok(await page.locator('a[href="https://suumo.jp/chintai/nagano/sc_matsumoto/"]').count()===1, 'SUUMOの松本市ページへのリンクもある');
   const sites = await page.$$eval('.siterow a', a=>a.map(x=>x.getAttribute('href')));
-  ok(sites.length===6 && ['https://www.homes.co.jp/chintai/nagano/matsumoto-city/list/','https://www.athome.co.jp/chintai/nagano/matsumoto-city/list/',
-      'https://www.chintai.net/nagano/area/20202/list/','https://realestate.yahoo.co.jp/rent/search/03/20/20202/'].every(u=>sites.includes(u)),
-     "HOME'S・アットホーム・CHINTAI・Yahoo!不動産も松本市のページで並ぶ（6サイト）");
+  ok(sites.length===7 && ['https://www.homes.co.jp/chintai/nagano/matsumoto-city/list/','https://www.athome.co.jp/chintai/nagano/matsumoto-city/list/',
+      'https://www.chintai.net/nagano/area/20202/list/','https://realestate.yahoo.co.jp/rent/search/03/20/20202/',
+      'https://myhome.nifty.com/rent/ft_couple/nagano/matsumotoshi_ct/'].every(u=>sites.includes(u)),
+     "HOME'S・アットホーム・CHINTAI・Yahoo!不動産・ニフティ（ふたり暮らし）も松本市のページで並ぶ（7サイト）");
   ok(await page.$$eval('.siterow a', a=>a.every(x=>x.target==='_blank' && x.rel.includes('noopener'))), 'どのサイトも新しいタブで安全に開く');
   ok(await page.locator('#safariOpen').count()===0, 'iPhoneのアプリ以外では「Safariで開く」の切り替えは出ない');
   // 条件を変える
@@ -863,6 +864,7 @@ await run('おすすめ物件', {files:F0(), token:'github_pat_owner'}, async (p
   ok((await page.textContent('.condsum')).includes('塩尻'), 'エリアを足せる');
   ok(await page.locator('a[href^="https://web.canary-app.jp/"]').count()===2, '足したエリアの探すリンクも増える');
   ok(await page.locator('a[href="https://www.chintai.net/nagano/area/20215/list/"]').count()===1, '塩尻市はCHINTAIなども塩尻市のページ');
+  ok(await page.locator('a[href="https://myhome.nifty.com/rent/ft_couple/nagano/shiojirishi_ct/"]').count()===1, 'ニフティも塩尻市のふたり暮らし向けページ');
   const featBtn = ()=>page.locator('[data-act="condFeat"][data-k="oidaki"]');
   const st0 = await featBtn().getAttribute('class');
   ok(st0.includes('want'), '追い焚きは最初「あれば嬉しい」');

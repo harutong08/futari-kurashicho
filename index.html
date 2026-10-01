@@ -496,13 +496,13 @@ const DEFAULT = {
 };
 
 /* 物件探しで使う表 */
-/* slug はサイトのURLに出てくる市の名前、code は市区町村コード（松本20202・塩尻20215・安曇野20220） */
+/* slug はサイトのURLに出てくる市の名前（ニフティだけ nifty の形）、code は市区町村コード（松本20202・塩尻20215・安曇野20220） */
 const CITIES = {
-  matsumoto:{label:"松本市", slug:"matsumoto", code:"20202",
+  matsumoto:{label:"松本市", slug:"matsumoto", nifty:"matsumotoshi", code:"20202",
     canary:"https://web.canary-app.jp/chintai/nagano/cities/bc7e809b-428f-4436-9b8c-8e0124a3c954/"},
-  shiojiri:{label:"塩尻市", slug:"shiojiri", code:"20215",
+  shiojiri:{label:"塩尻市", slug:"shiojiri", nifty:"shiojirishi", code:"20215",
     canary:"https://web.canary-app.jp/chintai/nagano/cities/97de37e8-6882-4f14-87dd-18a0deed2b20/"},
-  azumino:{label:"安曇野市", slug:"azumino", code:"20220",
+  azumino:{label:"安曇野市", slug:"azumino", nifty:"azuminoshi", code:"20220",
     canary:"https://web.canary-app.jp/chintai/nagano/cities/d6879e24-0b24-4420-991e-a5e6859f184f/"}
 };
 /* 探しに行く先。どれも市ごとの賃貸一覧ページ（2026年10月に開けることを確認） */
@@ -512,7 +512,8 @@ const SITES = [
   {k:"homes",   label:"HOME'S",       url:c=>"https://www.homes.co.jp/chintai/nagano/"+c.slug+"-city/list/"},
   {k:"athome",  label:"アットホーム",  url:c=>"https://www.athome.co.jp/chintai/nagano/"+c.slug+"-city/list/"},
   {k:"chintai", label:"CHINTAI",      url:c=>"https://www.chintai.net/nagano/area/"+c.code+"/list/"},
-  {k:"yahoo",   label:"Yahoo!不動産",  url:c=>"https://realestate.yahoo.co.jp/rent/search/03/20/"+c.code+"/"}
+  {k:"yahoo",   label:"Yahoo!不動産",  url:c=>"https://realestate.yahoo.co.jp/rent/search/03/20/"+c.code+"/"},
+  {k:"nifty",   label:"ニフティ（ふたり暮らし）", url:c=>"https://myhome.nifty.com/rent/ft_couple/nagano/"+c.nifty+"_ct/"}
 ];
 const LAYOUTS = ["1LDK","2K","2DK","2LDK","3K","3DK","3LDK","4K以上"];
 const BTYPES = {mansion:"マンション", apart:"アパート", house:"一戸建て・テラスハウス"};
@@ -667,7 +668,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-10-01b";
+const APP_VERSION = "2026-10-01c";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
