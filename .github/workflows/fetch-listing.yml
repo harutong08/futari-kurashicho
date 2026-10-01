@@ -1,0 +1,36 @@
+# 物件ページの読み取り。アプリが data/fetch.json に読み取りの依頼を書くと動く。
+# 結果は data/listings.json に書き、アプリが10秒ごとの読み込みで拾う。
+name: 物件ページの読み取り
+on:
+  push:
+    branches: [main]
+    paths: ["data/fetch.json"]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: fetch-listing
+  cancel-in-progress: false
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: ページを読む
+        run: node .github/scripts/fetch-listing.mjs
+      - name: 結果を保存
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data/listings.json
+          if git diff --cached --quiet; then echo "変化なし"; exit 0; fi
+          git commit -q -m "物件ページを読み取り"
+          for i in 1 2 3 4 5; do
+            if git pull -q --rebase origin main && git push -q origin HEAD:main; then exit 0; fi
+            sleep $((i*3))
+          done
+          exit 1

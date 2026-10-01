@@ -65,7 +65,7 @@ async function run(name, {files, token, pass, repoStatus, hash, clipboard, perms
     urls.push(m+' '+u);
     if (STRAY_SLASH.test(u)) return route.fulfill({status:400, body:'{"message":"Bad Request"}'});
     if (m==='OPTIONS') return route.fulfill({status:204, headers:CORS});
-    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : x.includes('links') ? 'links' : x.includes('homes') ? 'homes' : 'expenses';
+    const keyOf = x => x.includes('settings') ? 'settings' : x.includes('chat') ? 'chat' : x.includes('todos') ? 'todos' : x.includes('links') ? 'links' : x.includes('homes') ? 'homes' : x.includes('listings') ? 'listings' : x.includes('fetch.json') ? 'fetch' : 'expenses';
     if (m==='PUT'){ const key = keyOf(u);
       const b = JSON.parse(req.postData()||'{}');
       puts.push({key, data: JSON.parse(Buffer.from(b.content,'base64').toString('utf8'))});
@@ -1111,6 +1111,68 @@ await run('相手が足した物件の通知', {files:{...F0(), homes:[{id:'h0',
   await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
   ok((await page.evaluate(()=>window.__notes.length))===1, '物件タブを見ている間は鳴らさない');
   ok((await page.textContent('.homes')).includes('見てる間の物件'), '（画面にはそのまま出る）');
+});
+
+// 43〜44) 物件ページの自動読み取り（GitHub Actions の代わりに、試験の中で結果を書く）
+await run('物件ページの自動読み取り', {files:{...F0(), fetch:null, listings:null}, token:'github_pat_owner'}, async (page,{puts,files})=>{
+  page.on('dialog', d=>d.accept());
+  const U='https://suumo.jp/chintai/jnc_000102528722/';
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  await page.click('[data-act="homeFormOpen"]'); await page.waitForTimeout(250);
+  await page.locator('#homeForm [data-hd="url"]').fill(U);
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(900);
+  const req = puts.filter(p=>p.key==='fetch').pop();
+  ok(req && req.data.length===1 && req.data[0].url===U && /^[0-9a-f]{16}$/.test(req.data[0].id) && req.data[0].at>0, 'URLだけで保存すると、読み取りの依頼を書く（data/fetch.json）');
+  ok(!JSON.stringify(req.data).includes('enc'), '依頼は暗号化しない（GitHub Actionsが読めるように）');
+  ok((await page.textContent('.homes')).includes('読み取っています'), 'カードに「読み取っています」と出る');
+  const h0 = puts.filter(p=>p.key==='homes').pop().data[0];
+  ok(h0.lid===req.data[0].id && h0.reqAt===req.data[0].at, '物件に依頼のidを覚える');
+  // 読み取り係が結果を書いた
+  files.listings=[{id:req.data[0].id, url:U, reqAt:req.data[0].at, at:Date.now(), ok:true, site:'suumo', title:'フレシール', city:'matsumoto',
+    rent:65000, kanri:4100, shiki:0, rei:90000, layout:'2LDK', areaM2:50.53, walk:12, age:11, btype:'apart', floor:2, feats:['park','sepbath','oidaki','cold']}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(1000);
+  const card = page.locator('.home').first();
+  const ct = await card.textContent();
+  ok(ct.includes('フレシール'), '名前がサイトのものになる');
+  ok(ct.includes('¥69,100') && ct.includes('2LDK') && ct.includes('50.53㎡') && ct.includes('駅徒歩12分') && ct.includes('築11年') && ct.includes('2階'), '家賃＋管理費・間取り・面積・徒歩・築年数・階がサイトの値になる');
+  ok(ct.includes('SUUMOの内容で判定'), '「SUUMOの内容で判定」と出る');
+  ok(ct.includes('敷金 なし') && ct.includes('礼金 ¥90,000'), 'サイトの敷金・礼金が出る');
+  ok(ct.includes('✓ 駐車場あり') && ct.includes('◯ バス・トイレ別') && ct.includes('◯ 追い焚き'), '設備で判定される');
+  ok(ct.includes('？ 2人入居可') && ct.includes('要確認') && !(await card.getAttribute('class')).includes('ng'), 'サイトに書いていない必須の設備は「要確認」（条件外にはしない）');
+  const h1 = puts.filter(p=>p.key==='homes').pop().data.find(x=>x.lid===req.data[0].id);
+  ok(h1 && h1.rent===65000 && h1.autoAt>0 && h1.src==='suumo', '読み取った内容は2人の候補に保存される');
+  // 自分で直した値は、同じ結果で上書きしない
+  await card.locator('[data-act="homeEdit"]').click(); await page.waitForTimeout(300);
+  await page.locator('#homeForm [data-hd="rent"]').fill('63000');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(800);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  ok((await page.locator('.home').first().textContent()).includes('¥67,100'), 'あとから自分で直した家賃は上書きされない');
+  // 読めなかったとき
+  const U2='https://www.homes.co.jp/chintai/room/zzz/';
+  await page.click('[data-act="homeFormOpen"]'); await page.waitForTimeout(250);
+  await page.locator('#homeForm [data-hd="url"]').fill(U2);
+  await page.locator('#homeForm [data-hd="title"]').fill('二件目');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(900);
+  const req2 = puts.filter(p=>p.key==='fetch').pop();
+  ok(req2.data.length===2 && req2.data.some(q=>q.url===U2), '2件目の依頼も足される');
+  const id2 = req2.data.find(q=>q.url===U2);
+  files.listings=[...files.listings, {id:id2.id, url:U2, reqAt:id2.at, at:Date.now(), ok:false, err:'サイトに読み取りを断られました（403）'}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(1000);
+  const c2 = page.locator('.home', {hasText:'二件目'});
+  ok((await c2.textContent()).includes('読み取れませんでした') && (await c2.textContent()).includes('403'), '読めなかった理由が出る');
+  await c2.locator('[data-act="homeRefetch"]').click(); await page.waitForTimeout(900);
+  const req3 = puts.filter(p=>p.key==='fetch').pop();
+  ok(req3.data.find(q=>q.url===U2).at > id2.at, '「読み直す」で新しい依頼を書く');
+  ok((await page.locator('.home', {hasText:'二件目'}).textContent()).includes('読み取っています'), '読み直し中の表示に戻る');
+});
+
+await run('読み取りはGitHubにつないでいるときだけ', {files:{settings:null, expenses:null}}, async (page,{urls})=>{
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  await page.click('[data-act="homeFormOpen"]'); await page.waitForTimeout(250);
+  await page.locator('#homeForm [data-hd="url"]').fill('https://suumo.jp/chintai/jnc_1/');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(600);
+  ok((await page.textContent('.homes')).includes('GitHubにつないでいるときだけ'), 'つないでいなければ、その旨を出す');
+  ok(!urls.some(u=>u.startsWith('PUT') && u.includes('fetch.json')), '依頼は書かない');
 });
 
 // 34) サンプル版

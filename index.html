@@ -347,6 +347,12 @@ textarea.in{min-height:90px;font-family:ui-monospace,Consolas,monospace;font-siz
 .daysep{align-self:center;font-size:12px;color:var(--muted);background:var(--surface-2);border:1px solid var(--line);padding:2px 12px;border-radius:99px;margin:6px 0}
 .chatform{display:flex;gap:8px;margin-top:12px}
 .chatform .in{flex:1}
+.autost{font-size:12.5px;margin-top:8px;padding:6px 10px;border-radius:10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.autost.wait{background:var(--warn-soft);color:var(--warn)}
+.autost.done{background:var(--good-soft);color:var(--good)}
+.autost.bad{background:var(--bad-soft);color:var(--bad)}
+.autost .btn{padding:2px 8px;min-height:0;font-size:12px}
+.home .tags .maybe{background:var(--warn-soft);color:var(--warn)}
 .siterow{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:8px}
 .siterow a{text-decoration:none;color:var(--accent);font-weight:600}
 .siterow .city{font-size:13px;color:var(--muted);min-width:4.5em}
@@ -506,6 +512,7 @@ const CITIES = {
     canary:"https://web.canary-app.jp/chintai/nagano/cities/d6879e24-0b24-4420-991e-a5e6859f184f/"}
 };
 /* 探しに行く先。どれも市ごとの賃貸一覧ページ（2026年10月に開けることを確認） */
+const SITE_LABEL = {canary:"カナリー", suumo:"SUUMO", homes:"HOME'S", athome:"アットホーム", chintai:"CHINTAI", yahoo:"Yahoo!不動産", nifty:"ニフティ不動産", other:"物件ページ"};
 const SITES = [
   {k:"canary",  label:"カナリー",      url:c=>c.canary},
   {k:"suumo",   label:"SUUMO",        url:c=>"https://suumo.jp/chintai/nagano/sc_"+c.slug+"/"},
@@ -515,7 +522,7 @@ const SITES = [
   {k:"yahoo",   label:"Yahoo!不動産",  url:c=>"https://realestate.yahoo.co.jp/rent/search/03/20/"+c.code+"/"},
   {k:"nifty",   label:"ニフティ（ふたり暮らし）", url:c=>"https://myhome.nifty.com/rent/ft_couple/nagano/"+c.nifty+"_ct/"}
 ];
-const LAYOUTS = ["1LDK","2K","2DK","2LDK","3K","3DK","3LDK","4K以上"];
+const LAYOUTS = ["1R","1K","1DK","1LDK","2K","2DK","2LDK","3K","3DK","3LDK","4K以上"];
 const BTYPES = {mansion:"マンション", apart:"アパート", house:"一戸建て・テラスハウス"};
 /* こだわり条件。カナリーの人気条件（洗面所独立・2人入居相談・追い炊き・浴室乾燥機・ペット相談可 など）に、
    信州で効くもの（駐車場2台・都市ガス・寒冷地仕様）を足した */
@@ -658,7 +665,8 @@ function utilByMonth(){
    リポジトリには絶対に書き込まない（保存されるのは settings.json / expenses.json だけ）。 */
 const GH = {
   owner:"harutong08", repo:"futari-kurashicho", branch:"main",
-  paths:{ settings:"data/settings.json", expenses:"data/expenses.json", chat:"data/chat.json", todos:"data/todos.json", links:"data/links.json", homes:"data/homes.json" }
+  paths:{ settings:"data/settings.json", expenses:"data/expenses.json", chat:"data/chat.json", todos:"data/todos.json", links:"data/links.json", homes:"data/homes.json",
+          fetch:"data/fetch.json", listings:"data/listings.json" }
 };
 /* 末尾に / を付けないこと。付けるとGitHubが400を返し、その応答にはCORSヘッダが無いので
    ブラウザからは「Failed to fetch」としか見えなくなる */
@@ -668,7 +676,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-10-01c";
+const APP_VERSION = "2026-10-01d";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -1123,6 +1131,63 @@ function adoptTodos(remote){
   return changed;
 }
 
+/* ===== 物件ページの自動読み取り =====
+   URLの入った物件を保存すると data/fetch.json に依頼を書く。GitHub Actions（.github/workflows/fetch-listing.yml）が
+   ページを読んで data/listings.json に結果を書くので、それを10秒ごとの読み込みで拾って物件に入れる。
+   この2つのファイルは暗号化しない（Actions は合言葉を知らないため）。入るのは物件のURLと広告の内容だけ。 */
+let listings = (()=>{ try{ return JSON.parse(localStorage.getItem("futari.listings")||"[]")||[]; }catch(e){ return []; } })();
+async function listingId(url){
+  const b=await crypto.subtle.digest("SHA-256", new TextEncoder().encode(String(url).trim()));
+  return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,16);
+}
+const autoOk = ()=> mode==="github" && !locked && !DEMO;
+async function requestFetch(list){
+  if (!autoOk() || !list.length) return false;
+  for (let i=0;i<3;i++){
+    try{
+      const g=await ghGet("fetch");
+      const cur=Array.isArray(g.data)? g.data : [];
+      const next=cur.filter(q=>q && !list.some(n=>n.id===q.id)).concat(list.map(n=>({id:n.id, url:n.url, at:n.at}))).slice(-30);
+      const r=await ghPut("fetch", next, g.sha, "物件ページの読み取りを依頼");
+      if (r.conflict) continue;
+      return true;
+    }catch(e){ lastErr=e.message; setSync(); return false; }
+  }
+  return false;
+}
+/* 届いた読み取り結果を物件に入れる。サイトに書いてある値で上書きする（判定はサイトの内容で）。
+   設備は、サイトで見つかったもの＋自分で付けたもの。名前は空か、貼ったときの仮の名前のときだけ入れ替える */
+const AUTO_FIELDS = ["city","rent","kanri","shiki","rei","layout","areaM2","walk","age","btype","floor"];
+function applyListings(){
+  let changed=false;
+  for (const h of homes){
+    if (!h || !h.lid) continue;
+    const L=listings.find(x=>x && x.id===h.lid);
+    if (!L || (L.reqAt||0) < (h.reqAt||0) || h.autoAt===L.at) continue;
+    h.autoAt=L.at; h.up=Date.now(); changed=true;
+    if (!L.ok){ h.autoErr=L.err||"読み取れませんでした"; continue; }
+    h.autoErr="";
+    h.src=L.site||"";
+    for (const f of AUTO_FIELDS) if (L[f]!=null && L[f]!=="") h[f]=L[f];
+    if (L.title && (!h.title || /https?:|【|SUUMO|カナリー|CHINTAI|HOME'?S|アットホーム|Yahoo|物件詳細|賃貸/i.test(h.title))) h.title=L.title;
+    h.siteFeats=(L.feats||[]).filter(k=>FLABEL[k]);
+    h.feats=[...new Set((h.feats||[]).concat(h.siteFeats))];
+  }
+  if (changed){ saveHomesSoon(); }
+  return changed;
+}
+/* 物件を保存するときに呼ぶ：URLがあれば読み取りを頼む（同じURLの新しい結果があればそれを使う） */
+async function queueHome(h, force){
+  if (!h || !linkOk(h.url)) return;
+  const id=await listingId(h.url);
+  const L=listings.find(x=>x && x.id===id);
+  if (h.lid!==id || force){ h.lid=id; h.autoAt=null; h.autoErr=""; }
+  if (!force && L && L.ok && Date.now()-(L.at||0) < 3*24*3600e3){ h.reqAt=L.reqAt||0; applyListings(); return; }
+  h.reqAt=Date.now();
+  if (!autoOk()) return;
+  await requestFetch([{id, url:h.url.trim(), at:h.reqAt}]);
+}
+
 function saveHomesSoon(){
   saveLocalHomes();
   if (mode!=="github"){ if(mode==="readonly") markDirty(); return; }
@@ -1301,7 +1366,8 @@ async function rekeyAll(){
 async function pull(){
   if (mode==="local" || localDirty || busy || drag) return;
   try{
-    const [gs,ge,gc,gt,gl,gh]=await Promise.all([ghGet("settings"), ghGet("expenses"), ghGet("chat"), ghGet("todos"), ghGet("links"), ghGet("homes")]);
+    const [gs,ge,gc,gt,gl,gh,gx]=await Promise.all([ghGet("settings"), ghGet("expenses"), ghGet("chat"), ghGet("todos"), ghGet("links"), ghGet("homes"),
+      homes.some(h=>h && h.lid && !h.autoAt)? ghGet("listings").catch(()=>({missing:true})) : Promise.resolve({missing:true, skip:true})]);
     lastErr="";
     let changed=false;
     const wasLocked=locked;
@@ -1311,6 +1377,10 @@ async function pull(){
     if (gt.missing){ sha.todos=null; syncedTodo=new Set(); } else { sha.todos=gt.sha; const v=await open(gt.data, "todos"); if(v!==undefined) changed=adoptTodos(v)||changed; }
     if (gl.missing){ sha.links=null; syncedLink=new Set(); } else { sha.links=gl.sha; const v=await open(gl.data, "links"); if(v!==undefined) changed=adoptLinks(v)||changed; }
     if (gh.missing){ sha.homes=null; syncedHome=new Set(); } else { sha.homes=gh.sha; const v=await open(gh.data, "homes"); if(v!==undefined) changed=adoptHomes(v)||changed; }
+    if (!gx.missing && Array.isArray(gx.data)){
+      listings=gx.data; try{ localStorage.setItem("futari.listings", JSON.stringify(listings.slice(0,60))); }catch(e){}
+      if (!locked && applyListings()) changed=true;
+    }
     if ((changed || locked!==wasLocked) && !editing()) render();
     if (changed){ notifyNew(); updateBadge(); }
   }catch(e){ lastErr=e.message; }
@@ -1909,21 +1979,24 @@ function judgeHome(h){
   const must=Object.keys(c.feats).filter(k=>c.feats[k]==="must" && FLABEL[k]);
   const want=Object.keys(c.feats).filter(k=>c.feats[k]==="want" && FLABEL[k]);
   const mustMiss=must.filter(k=>!feats.has(k));
-  mustMiss.forEach(k=>why.push(FLABEL[k]+"がない"));
+  /* サイトから読み取った物件は、書いていない＝無いとは限らないので「要確認」にとどめる */
+  const unsure = h.autoAt && !h.autoErr? mustMiss : [];
+  mustMiss.filter(k=>!unsure.includes(k)).forEach(k=>why.push(FLABEL[k]+"がない"));
   const hit=want.filter(k=>feats.has(k)), miss=want.filter(k=>!feats.has(k));
   let score;
   if (!why.length){
     const room = c.maxRent? Math.max(0, Math.min(1, (c.maxRent-tot)/(c.maxRent*0.2))) : 0.5;
-    score = 50 + (want.length? Math.round(30*hit.length/want.length) : 30) + Math.round(15*room) + (h.fav? 5 : 0);
+    score = 50 + (want.length? Math.round(30*hit.length/want.length) : 30) + Math.round(15*room) + (h.fav? 5 : 0) - 8*unsure.length;
   } else {
     score = Math.max(0, 40 - 10*why.length);
   }
-  return {ok:!why.length, why, score:Math.min(100,score), hit, miss, mustHit:must.filter(k=>feats.has(k)), tot};
+  return {ok:!why.length, why, score:Math.max(0,Math.min(100,score)), hit, miss, unsure, mustHit:must.filter(k=>feats.has(k)), tot};
 }
 /* その物件の家賃で計算した、契約時の初期費用（敷金・礼金・仲介手数料など） */
 function initialFor(h){
   const zero=(h.feats||[]).includes("zero");
   return S.initial.filter(x=>!x.off && x.g==="contract").reduce((a,x)=>{
+    if ((x.id==="shiki"||x.id==="rei") && h[x.id]!=null && h[x.id]!=="") return a + (+h[x.id]||0);   /* サイトに書いてある額 */
     if (zero && (x.id==="shiki"||x.id==="rei")) return a;
     return a + (x.m!=null ? Math.round((+h.rent||0)*x.m) : (+x.amt||0));
   },0);
@@ -1980,12 +2053,12 @@ function homeForm(){
       <label class="fld wide">物件ページのURL（任意）<input class="in" type="url" inputmode="url" data-hd="url" maxlength="600" placeholder="カナリーやSUUMOの「共有」で出るURLを貼る" value="${esc(d.url)}"></label>
       <label class="fld wide">物件名<input class="in" data-hd="title" maxlength="80" placeholder="例：〇〇ハイツ 203号室" value="${esc(d.title)}"></label>
       <label class="fld">エリア${sel("city", Object.entries(CITIES).map(([k,v])=>[k,v.label]).concat([["other","その他"]]), "選ぶ")}</label>
-      <label class="fld">賃料<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="0" step="1000" data-hd="rent" value="${esc(d.rent)}" placeholder="70000"></span></label>
-      <label class="fld">管理費・共益費<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="0" step="500" data-hd="kanri" value="${esc(d.kanri)}" placeholder="3000"></span></label>
+      <label class="fld">賃料<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="0" step="any" data-hd="rent" value="${esc(d.rent)}" placeholder="70000"></span></label>
+      <label class="fld">管理費・共益費<span class="yenwrap"><input class="in yen" type="number" inputmode="numeric" min="0" step="any" data-hd="kanri" value="${esc(d.kanri)}" placeholder="3000"></span></label>
       <label class="fld">間取り${sel("layout", LAYOUTS.map(l=>[l,l]), "選ぶ")}</label>
-      <label class="fld">専有面積（㎡）<input class="in" type="number" inputmode="decimal" min="0" step="0.1" data-hd="areaM2" value="${esc(d.areaM2)}" placeholder="50"></label>
-      <label class="fld">駅徒歩（分・任意）<input class="in" type="number" inputmode="numeric" min="0" step="1" data-hd="walk" value="${esc(d.walk)}"></label>
-      <label class="fld">築年数（年・任意）<input class="in" type="number" inputmode="numeric" min="0" step="1" data-hd="age" value="${esc(d.age)}"></label>
+      <label class="fld">専有面積（㎡）<input class="in" type="number" inputmode="decimal" min="0" step="any" data-hd="areaM2" value="${esc(d.areaM2)}" placeholder="50"></label>
+      <label class="fld">駅徒歩（分・任意）<input class="in" type="number" inputmode="numeric" min="0" step="any" data-hd="walk" value="${esc(d.walk)}"></label>
+      <label class="fld">築年数（年・任意）<input class="in" type="number" inputmode="numeric" min="0" step="any" data-hd="age" value="${esc(d.age)}"></label>
       <label class="fld">建物の種類${sel("btype", Object.entries(BTYPES), "選ぶ")}</label>
       <div class="fld wide">当てはまるもの
         <div class="chipset">${FEATS.map(f=>`<button type="button" class="chip" data-act="hdFeat" data-k="${f.k}" aria-pressed="${(d.feats||[]).includes(f.k)}">${esc(f.label)}</button>`).join("")}</div></div>
@@ -1999,8 +2072,15 @@ function homeCard(h, j, rank){
   const good=linkOk(h.url), inc=netTotal();
   const pct=inc? Math.round(j.tot/inc*100) : 0;
   const bits=[(CITIES[h.city]||{}).label||(h.city==="other"?"その他":""), h.layout, h.areaM2? h.areaM2+"㎡" : "",
-              h.walk!==""&&h.walk!=null? "駅徒歩"+h.walk+"分" : "", h.age!==""&&h.age!=null? (+h.age===0? "新築" : "築"+h.age+"年") : "", BTYPES[h.btype]||""].filter(Boolean);
+              h.walk!==""&&h.walk!=null? "駅徒歩"+h.walk+"分" : "", h.age!==""&&h.age!=null? (+h.age===0? "新築" : "築"+h.age+"年") : "", BTYPES[h.btype]||"",
+              h.floor? h.floor+"階" : ""].filter(Boolean);
   const title=h.title||linkHost(h.url)||"名前なしの物件";
+  const dep=(v)=> v==null||v===""? "" : +v? yen(+v) : "なし";
+  /* サイトからの読み取りの状態 */
+  const auto = !h.lid? "" : h.autoErr? `<div class="autost bad">読み取れませんでした：${esc(h.autoErr)} <button class="btn small ghost" data-act="homeRefetch" data-id="${esc(h.id)}">読み直す</button></div>`
+    : !h.autoAt? `<div class="autost wait">${autoOk()? "⏳ サイトの内容を読み取っています（1分ほど）" : "サイトの読み取りは、GitHubにつないでいるときだけ動きます"}</div>`
+    : `<div class="autost done">✓ ${esc(SITE_LABEL[h.src]||"サイト")}の内容で判定（${esc(new Date(h.autoAt).getMonth()+1+"/"+new Date(h.autoAt).getDate())}に読み取り）
+        <button class="btn small ghost" data-act="homeRefetch" data-id="${esc(h.id)}">読み直す</button></div>`;
   return `<li class="home ${j.ok? (rank===1? "top1" : "") : "ng"}">
     <div class="hd">
       <div style="min-width:0">
@@ -2016,9 +2096,12 @@ function homeCard(h, j, rank){
       <span>家賃＋管理費 <b>${yen(j.tot)}</b></span>
       <span>手取りの <b>${pct}%</b></span>
       <span>契約時の初期費用 約 <b>${yen(Math.round(initialFor(h)/1000)*1000)}</b></span>
+      ${dep(h.shiki)||dep(h.rei)? `<span>敷金 <b>${dep(h.shiki)||"?"}</b>・礼金 <b>${dep(h.rei)||"?"}</b></span>` : ""}
     </div>
+    ${auto}
     <div class="tags">
       ${j.why.map(w=>`<span class="bad">✕ ${esc(w)}</span>`).join("")}
+      ${(j.unsure||[]).map(k=>`<span class="maybe">？ ${esc(FLABEL[k])}（サイトに記載なし・要確認）</span>`).join("")}
       ${j.mustHit.map(k=>`<span class="ok">✓ ${esc(FLABEL[k])}</span>`).join("")}
       ${j.hit.map(k=>`<span class="ok">◯ ${esc(FLABEL[k])}</span>`).join("")}
       ${j.miss.map(k=>`<span class="no">${esc(FLABEL[k])}</span>`).join("")}
@@ -2109,7 +2192,7 @@ function addLink(){
   toast("参考リンクを追加しました");
 }
 
-function saveHome(){
+async function saveHome(){
   if (!canWrite()){ nudge(); return; }
   const d=homeDraft, {url:u0, rest}=splitPasted(d.url);
   const url=u0.trim(), title=(d.title||rest||"").trim();
@@ -2117,14 +2200,17 @@ function saveHome(){
   if (!title && !url){ toast("物件名かURLを入れてください"); return; }
   const num=(v,dec)=>{ if (v===""||v==null) return ""; const n=+v; if (!isFinite(n)||n<0) return ""; return dec? Math.round(n*10)/10 : Math.round(n); };
   const old=homeEditId? homes.find(x=>x.id===homeEditId) : null;
-  const rec={id: old? old.id : uid()+uid(), url, title, city:d.city||"", rent:num(d.rent)||0, kanri:num(d.kanri)||0,
+  const rec=Object.assign({}, old||{}, {id: old? old.id : uid()+uid(), url, title, city:d.city||"", rent:num(d.rent)||0, kanri:num(d.kanri)||0,
     layout:d.layout||"", areaM2:num(d.areaM2,true), walk:num(d.walk), age:num(d.age), btype:d.btype||"",
     feats:(d.feats||[]).filter(k=>FLABEL[k]), memo:String(d.memo||"").trim(),
-    at: old? old.at : Date.now(), up: Date.now(), by: old? old.by : me, fav: old? !!old.fav : false};
+    at: old? old.at : Date.now(), up: Date.now(), by: old? old.by : me, fav: old? !!old.fav : false});
+  if (old && old.url!==url){ delete rec.lid; delete rec.autoAt; delete rec.autoErr; delete rec.src; delete rec.siteFeats; delete rec.shiki; delete rec.rei; delete rec.floor; }
   homes= old? homes.map(x=>x.id===old.id? rec : x) : sortHomesByTime(homes.concat([rec]));
   homeDraft=emptyHome(); homeEditId=null; homeFormOpen=false;
+  const ask=linkOk(url) && (!old || old.url!==url || !rec.lid);
+  if (ask) await queueHome(rec);
   saveHomesSoon(); render();
-  toast(old? "直しました" : "候補に入れました");
+  toast(old? "直しました" : ask && autoOk() && !rec.autoAt? "候補に入れました。サイトの内容を読み取っています（1分ほど）" : "候補に入れました");
 }
 
 function todoCard(){
@@ -2825,6 +2911,12 @@ document.addEventListener("click", async e=>{
     homeEditId=h.id; homeFormOpen=true; render();
     const f=$("#homeForm"); if(f) f.scrollIntoView({behavior:"smooth",block:"start"});
     return; }
+  if (act==="homeRefetch"){
+    if (!canWrite()){ nudge(); return; }
+    const h=homes.find(x=>x.id===t.dataset.id); if(!h) return;
+    if (!autoOk()){ toast("サイトの読み取りは、GitHubにつないでいるときだけ動きます"); return; }
+    await queueHome(h, true); h.up=Date.now(); saveHomesSoon(); render();
+    toast("もう一度読み取っています（1分ほど）"); return; }
   if (act==="homeDel"){
     if (!canWrite()){ nudge(); return; }
     const h=homes.find(x=>x.id===t.dataset.id); if(!h) return;
