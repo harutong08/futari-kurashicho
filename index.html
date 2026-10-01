@@ -565,8 +565,28 @@ let homeFormOpen = false;   /* 物件の追加欄を開いているか */
 let homeEditId = null;      /* 直している物件のid */
 const emptyHome = () => ({url:"", title:"", city:"", rent:"", kanri:"", layout:"", areaM2:"", walk:"", age:"", btype:"", feats:[], memo:""});
 let homeDraft = emptyHome();
-let tab = (()=>{ try{ return new URLSearchParams(location.search).get("open")==="chat"? "chat" : "home"; }catch(e){ return "home"; } })();
-if (tab==="chat"){ try{ history.replaceState(null, "", location.pathname+(DEMO? "?demo" : "")+location.hash); }catch(e){} }
+/* 貼られた文字（「物件名 https://…」など）を追加欄の書きかけに入れる */
+function draftFromText(raw, title){
+  const {url, rest}=splitPasted(raw);
+  homeDraft=emptyHome(); homeEditId=null; homeFormOpen=true;
+  homeDraft.url=linkOk(url)? url : "";
+  homeDraft.title=String(title||rest||"").replace(/https?:\/\/\S+/g,"").replace(/\s+/g," ").trim().slice(0,80);
+  const u=homeDraft.url;
+  for (const k of Object.keys(CITIES)) if (u.includes(CITIES[k].slug) || raw.includes(CITIES[k].label)) { homeDraft.city=k; break; }
+  return !!homeDraft.url;
+}
+let tab = (()=>{ try{ const o=new URLSearchParams(location.search).get("open"); return o==="chat"||o==="bukken"? o : "home"; }catch(e){ return "home"; } })();
+if (tab!=="home"){ try{ history.replaceState(null, "", location.pathname+(DEMO? "?demo" : "")+location.hash); }catch(e){} }
+/* 他のアプリの「共有」からこのアプリが選ばれたとき（Androidのホーム画面アプリ）。
+   ?title=…&text=…&url=… で渡ってくるので、物件の追加欄に入れた状態で開く */
+const shared = (()=>{ try{
+  const q=new URLSearchParams(location.search);
+  const raw=[q.get("url"), q.get("text"), q.get("title")].filter(Boolean).join(" ");
+  if (!/https?:\/\//i.test(raw)) return null;
+  history.replaceState(null, "", location.pathname+(DEMO? "?demo" : "")+location.hash);
+  return {raw, title:q.get("title")||""};
+}catch(e){ return null; } })();
+if (shared){ tab="bukken"; draftFromText(shared.raw, shared.title); }
 let editBudget = false;
 let openNotes = new Set();   /* メモ欄を開いている初期費用の項目 */
 let month = todayStr().slice(0,7);
@@ -647,7 +667,7 @@ const READONLY_MSG = "いまは見るだけの状態です。「毎月の予算�
    2台合わせて上限の3割ほどに収まる。トークンなしの閲覧は1時間60回までなので5分。 */
 const POLL_MS = { github:10000, readonly:300000 };
 /* sw.js の VERSION と必ず同じにすること（test/smoke.mjs がズレを見る） */
-const APP_VERSION = "2026-10-01a";
+const APP_VERSION = "2026-10-01b";
 const TOKEN_KEY = "futari.token";
 const PASS_KEY = "futari.pass";
 const KDF_ITER = 200000;
@@ -983,9 +1003,36 @@ function unreadCount(){
    アイコンの未読数（バッジ）も、対応している端末では付ける。 */
 let notifyOn = (()=>{ try{ return localStorage.getItem(NOTIFY_KEY)==="1"; }catch(e){ return false; } })();
 let notifiedAt = (()=>{ try{ return +localStorage.getItem(NOTIFIED_KEY)||0; }catch(e){ return 0; } })();
+const NOTIFIED_HOME_KEY = "futari.notifiedHome";
+let notifiedHomes = (()=>{ try{ return new Set(JSON.parse(localStorage.getItem(NOTIFIED_HOME_KEY)||"null")||[]); }catch(e){ return null; } })();
 const notifyOk = ()=> !DEMO && ("Notification" in window);
 const notifyLive = ()=> notifyOn && notifyOk() && Notification.permission==="granted" && me!==null;
+async function showNote(title, body, open){
+  const opt={body:String(body||"").slice(0,100), tag:"futari-"+open, renotify:true, icon:"icon-192.png", badge:"icon-192.png", data:{open}};
+  try{
+    const reg=swReg || (("serviceWorker" in navigator)? await navigator.serviceWorker.getRegistration() : null);
+    if (reg && reg.showNotification) await reg.showNotification(title, opt); else new Notification(title, opt);
+  }catch(e){ try{ new Notification(title, opt); }catch(err){} }
+}
+/* 相手が足した物件を知らせる。一度知らせた（または開いた時点であった）物件は覚えておく */
+function notifyHomes(silent){
+  if (me===null) return;
+  const first=!notifiedHomes;
+  if (first) notifiedHomes=new Set();
+  const fresh=homes.filter(h=>h && h.id && !notifiedHomes.has(h.id));
+  if (!fresh.length) return;
+  fresh.forEach(h=>notifiedHomes.add(h.id));
+  try{ localStorage.setItem(NOTIFIED_HOME_KEY, JSON.stringify([...notifiedHomes].slice(-300))); }catch(e){}
+  if (silent || first) return;
+  const theirs=fresh.filter(h=>h.by!==me && h.by!=null);
+  if (!theirs.length || !notifyLive() || (!document.hidden && tab==="bukken")) return;
+  const h=theirs[0];
+  const title=(S.names[h.by]||"相手")+"が物件を追加"+(theirs.length>1? "（"+theirs.length+"件）" : "");
+  const body=(h.title||linkHost(h.url)||"物件")+(+h.rent? "　"+yen(totalRent(h)) : "");
+  showNote(title, body, "bukken");
+}
 async function notifyNew(silent){
+  notifyHomes(silent);
   if (me===null) return;
   const last=chat.length? Math.max(...chat.map(m=>m.at||0)) : 0;
   if (!notifiedAt){ notifiedAt=last||Date.now(); try{ localStorage.setItem(NOTIFIED_KEY, String(notifiedAt)); }catch(e){} return; }   /* 初回は昔の発言で鳴らさない */
@@ -997,11 +1044,7 @@ async function notifyNew(silent){
   if (!notifyLive() || (!document.hidden && tab==="chat")) return;
   const m=fresh[fresh.length-1];
   const title=(S.names[m.who]||"相手")+"からメッセージ"+(fresh.length>1? "（"+fresh.length+"件）" : "");
-  const opt={body:String(m.text||"").slice(0,100), tag:"futari-chat", renotify:true, icon:"icon-192.png", badge:"icon-192.png", data:{open:"chat"}};
-  try{
-    const reg=swReg || (("serviceWorker" in navigator)? await navigator.serviceWorker.getRegistration() : null);
-    if (reg && reg.showNotification) await reg.showNotification(title, opt); else new Notification(title, opt);
-  }catch(e){ try{ new Notification(title, opt); }catch(err){} }
+  showNote(title, m.text, "chat");
 }
 function updateBadge(){
   try{
@@ -1015,7 +1058,7 @@ function notifyRow(){
   if (!notifyOk()) return `<p class="note">この画面では通知が使えません。iPhoneは「ホーム画面に追加」したアプリから開くと使えます。</p>`;
   if (Notification.permission==="denied") return `<p class="note">通知がブロックされています。端末（ブラウザ）の設定で、このアプリの通知を許可してください。</p>`;
   return `<div class="notirow">
-    <span>${notifyLive()? "🔔 通知オン：相手の新しいメッセージを知らせます" : "🔕 通知はオフです"}</span>
+    <span>${notifyLive()? "🔔 通知オン：相手のメッセージと、相手が足した物件を知らせます" : "🔕 通知はオフです"}</span>
     ${notifyLive()? `<button class="btn small ghost" data-act="notifyOff">オフにする</button>` : `<button class="btn small primary" data-act="notifyOn">通知をオンにする</button>`}
   </div>
   <p class="note" style="margin-top:4px">アプリを開いている間（ほかのアプリに切り替えて裏にあるときも含む）に届きます。完全に閉じていると届きません。</p>`;
@@ -1395,7 +1438,7 @@ async function setupSW(){
     swReg=await navigator.serviceWorker.register("sw.js", {scope:"./", updateViaCache:"none"});
     /* 通知を押したとき、開いている画面をチャットに切り替える */
     navigator.serviceWorker.addEventListener("message", e=>{
-      if (e.data && e.data.type==="OPEN" && e.data.tab==="chat" && !locked){ tab="chat"; render(); window.scrollTo({top:0}); }
+      if (e.data && e.data.type==="OPEN" && (e.data.tab==="chat" || e.data.tab==="bukken") && !locked){ tab=e.data.tab; render(); window.scrollTo({top:0}); }
     });
     navigator.serviceWorker.addEventListener("controllerchange", ()=>{
       /* 初めて取り付けたときは切り替えではないので、読み込み直さない */
@@ -2005,18 +2048,21 @@ function viewBukken(){
   <section class="card s12">
     <div class="row between"><div><h2>おすすめの物件</h2>
       <p class="sub" style="margin:0">見つけた物件を入れると、条件と予算で点数を付けて並べます</p></div>
-      ${homeFormOpen? "" : `<button class="btn small primary" data-act="homeFormOpen">＋ 物件を追加</button>`}</div>
+      ${homeFormOpen? "" : `<div class="row" style="gap:6px">
+        ${navigator.clipboard && navigator.clipboard.readText? `<button class="btn small primary" data-act="homePaste">📋 コピーした物件を追加</button>` : ""}
+        <button class="btn small" data-act="homeFormOpen">＋ 手で追加</button></div>`}</div>
     <div class="callout" style="margin-top:10px;font-size:13px">
       <b>探しに行く</b>（条件は各サイトの画面で指定してください）
       ${cities.map(k=>`<div class="siterow"><span class="city">${esc(CITIES[k].label)}</span>
         ${SITES.map(x=>`<a class="btn small" data-site="${x.k}" href="${esc(x.url(CITIES[k]))}" target="_blank" rel="noopener noreferrer">${esc(x.label)} ↗</a>`).join("")}</div>`).join("")}
       ${IOS_APP? `<label class="toggle" style="margin-top:8px;font-size:13px"><input type="checkbox" id="safariOpen" ${safariOpen?"checked":""}> サイトはSafariで開く（ホーム画面のアプリから開いたとき）</label>` : ""}
-      <p class="note" style="margin:8px 0 0">気になる物件があったら、そのサイトの「共有」でURLをコピーして、ここの「物件を追加」に貼ってください。
-        物件情報を自動で集めてくることはできません（各サイトにデータを受け取る仕組みがないため）。</p>
+      <p class="note" style="margin:8px 0 0"><b>他のアプリで見た物件を共有するには</b>：SUUMOやカナリーなどのアプリで物件の「共有」→「コピー」を押し、
+        ここに戻って「📋 コピーした物件を追加」を押すだけ。家賃などを入れて保存すると、相手の画面にも出て、通知がオンなら相手に知らせます。
+        物件情報そのものを自動で集めてくることはできません（各サイトにデータを受け取る仕組みがないため）。</p>
     </div>
     ${homeFormOpen? homeForm() : ""}
     ${homes.length? `<ul class="homes">${good.map((x,i)=>homeCard(x.h,x.j,i+1)).join("")}${ng.map(x=>homeCard(x.h,x.j,0)).join("")}</ul>`
-      : `<div class="empty">まだ候補がありません。「＋ 物件を追加」から入れてください。</div>`}
+      : `<div class="empty">まだ候補がありません。他のアプリで物件の「共有」→「コピー」をしてから「📋 コピーした物件を追加」を押すか、「＋ 手で追加」から入れてください。</div>`}
   </section>
   </div>`;
 }
@@ -2741,6 +2787,19 @@ document.addEventListener("click", async e=>{
   if (act==="condReset"){ if(!confirm("物件の条件を最初の状態に戻しますか？")) return; S.search=clone(DEFAULT.search); commit(true); toast("条件を戻しました"); return; }
   if (act==="homeFormOpen"){ homeFormOpen=true; homeEditId=null; homeDraft=emptyHome(); render();
     const f=$("#homeForm"); if(f){ f.scrollIntoView({behavior:"smooth",block:"start"}); const u=f.querySelector('[data-hd="url"]'); if(u) u.focus({preventScroll:true}); }
+    return; }
+  if (act==="homePaste"){
+    if (!canWrite()){ nudge(); return; }
+    let txt="";
+    try{ txt=await navigator.clipboard.readText(); }catch(err){ txt=""; }
+    if (!draftFromText(txt||"", "")){
+      homeDraft=emptyHome(); homeFormOpen=true; render();
+      toast("コピーした中にURLが見つかりませんでした。下の欄に貼ってください");
+      const u=document.querySelector('#homeForm [data-hd="url"]'); if(u) u.focus();
+      return;
+    }
+    render(); toast("貼りました。家賃・間取りなどを入れて保存してください");
+    const f=$("#homeForm"); if(f){ f.scrollIntoView({behavior:"smooth",block:"start"}); const r=f.querySelector('[data-hd="rent"]'); if(r) r.focus({preventScroll:true}); }
     return; }
   if (act==="homeFormClose"){ homeFormOpen=false; homeEditId=null; homeDraft=emptyHome(); render(); return; }
   if (act==="hdFeat"){

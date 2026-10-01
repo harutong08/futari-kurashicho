@@ -1019,7 +1019,7 @@ await run('通知から開くとチャット', {files:F0(), token:'github_pat_ow
   ok((await page.getAttribute('[data-tab="chat"]','aria-selected'))==='true', '?open=chat で開くとチャット画面になる');
   ok(!page.url().includes('open=chat'), '開いたあとアドレスから消える（再読み込みで戻らない）');
   const sw = readFileSync(join(ROOT,'sw.js'),'utf8');
-  ok(sw.includes('notificationclick') && sw.includes('./?open=chat'), '通知を押したときの動きが sw.js にある');
+  ok(sw.includes('notificationclick') && sw.includes('./?open='), '通知を押したときの動きが sw.js にある');
 });
 
 // 39) iPhoneのホーム画面アプリでは、サイトをSafariで開く
@@ -1053,6 +1053,62 @@ await run('Safariで開く', {files:F0(), token:'github_pat_owner', init:asIPhon
   const [pop] = await Promise.all([page.waitForEvent('popup', {timeout:3000}).catch(()=>null), page.locator('.siterow a[data-site="suumo"]').first().click()]);
   ok((await page.evaluate(()=>window.__safari)).length===before, 'オフならSafariに渡さない');
   if (pop) await pop.close();
+});
+
+// 40〜42) 他のアプリで見た物件を共有する
+await run('コピーした物件を追加', {files:F0(), token:'github_pat_owner', clipboard:true}, async (page,{puts})=>{
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(300);
+  ok(await page.locator('[data-act="homePaste"]').isVisible(), '「コピーした物件を追加」ボタンがある');
+  await page.evaluate(()=>navigator.clipboard.writeText('【SUUMO】グリーンハイツ 201号室 松本市 https://suumo.jp/chintai/jnc_000099999999/?bc=1'));
+  await page.click('[data-act="homePaste"]'); await page.waitForTimeout(400);
+  ok((await page.locator('#homeForm [data-hd="url"]').inputValue())==='https://suumo.jp/chintai/jnc_000099999999/?bc=1', 'コピーしたURLが入る');
+  ok((await page.locator('#homeForm [data-hd="title"]').inputValue()).includes('グリーンハイツ 201号室'), '一緒にコピーされた物件名も入る');
+  ok((await page.locator('#homeForm [data-hd="city"]').inputValue())==='matsumoto', '文中の市の名前からエリアも選ばれる');
+  await page.locator('#homeForm [data-hd="rent"]').fill('65000');
+  await page.locator('#homeForm button[type=submit]').click(); await page.waitForTimeout(800);
+  const h = puts.filter(p=>p.key==='homes').pop();
+  ok(h && h.data[0].url.startsWith('https://suumo.jp/') && h.data[0].rent===65000, '保存すると2人の候補に入る（GitHubに保存）');
+  // URLが無いとき
+  await page.evaluate(()=>navigator.clipboard.writeText('ただの文字'));
+  await page.click('[data-act="homePaste"]'); await page.waitForTimeout(400);
+  ok(await page.locator('#homeForm').count()===1 && (await page.textContent('#toast')).includes('URLが見つかりません'), 'URLが無ければ、手で貼る欄を開いて知らせる');
+});
+
+await run('共有で渡される（Android）', {files:F0(), token:'github_pat_owner',
+    hash:'?title='+encodeURIComponent('みほんコーポ 103')+'&text='+encodeURIComponent('塩尻市の2DK')+'&url='+encodeURIComponent('https://www.homes.co.jp/chintai/b-1234567/')}, async (page)=>{
+  ok((await page.getAttribute('[data-tab="bukken"]','aria-selected'))==='true', '共有で開くと物件タブになる');
+  ok((await page.locator('#homeForm [data-hd="url"]').inputValue())==='https://www.homes.co.jp/chintai/b-1234567/', '共有されたURLが入る');
+  ok((await page.locator('#homeForm [data-hd="title"]').inputValue())==='みほんコーポ 103', '共有された物件名が入る');
+  ok((await page.locator('#homeForm [data-hd="city"]').inputValue())==='shiojiri', 'エリアも選ばれる');
+  ok(!page.url().includes('url='), '開いたあとアドレスから消える');
+  const mf = JSON.parse(readFileSync(join(ROOT,'manifest.webmanifest'),'utf8'));
+  ok(mf.share_target && mf.share_target.method==='GET' && mf.share_target.params.url==='url', 'アプリの共有先として登録できる（manifest）');
+});
+
+await run('相手が足した物件の通知', {files:{...F0(), homes:[{id:'h0', title:'前からある物件', rent:60000, by:1, at:1}]}, token:'github_pat_owner', perms:['notifications'], init:spyNotes}, async (page,{files})=>{
+  await page.click('[data-tab="chat"]'); await page.waitForTimeout(300);
+  await page.click('[data-act="notifyOn"]'); await page.waitForTimeout(300);
+  ok((await page.textContent('.notirow')).includes('物件'), '通知の説明に物件も入る');
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  ok((await page.evaluate(()=>window.__notes.length))===0, '開いた時点であった物件では鳴らない');
+  files.homes = [...files.homes, {id:'h1', title:'相手が見つけた家', city:'azumino', rent:58000, kanri:2000, by:1, at:Date.now()}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  const n = await page.evaluate(()=>window.__notes);
+  ok(n.length===1 && n[0].title.includes('物件を追加') && n[0].body.includes('相手が見つけた家') && n[0].body.includes('60,000'), '相手が物件を足すと通知（物件名と家賃）');
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(600);
+  ok((await page.evaluate(()=>window.__notes.length))===1, '同じ物件で二度は鳴らない');
+  // 自分で足した物件では鳴らない
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(200);
+  await addHome(page, {title:'自分の物件', city:'matsumoto', rent:60000});
+  await page.click('[data-tab="home"]'); await page.waitForTimeout(200);
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  ok((await page.evaluate(()=>window.__notes.length))===1, '自分で足した物件では鳴らない');
+  // 物件タブを見ているときは鳴らさない
+  await page.click('[data-tab="bukken"]'); await page.waitForTimeout(200);
+  files.homes = [...files.homes, {id:'h2', title:'見てる間の物件', rent:50000, by:1, at:Date.now()}];
+  await page.evaluate(()=>window.dispatchEvent(new Event('focus'))); await page.waitForTimeout(800);
+  ok((await page.evaluate(()=>window.__notes.length))===1, '物件タブを見ている間は鳴らさない');
+  ok((await page.textContent('.homes')).includes('見てる間の物件'), '（画面にはそのまま出る）');
 });
 
 // 34) サンプル版

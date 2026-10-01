@@ -5,7 +5,7 @@
 
    VERSION は index.html の APP_VERSION と必ず同じ文字列にすること。
    test/smoke.mjs がズレを検出する。 */
-const VERSION = "2026-10-01a";
+const VERSION = "2026-10-01b";
 const CACHE = "futari-" + VERSION;
 const SHELL = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png"];
 
@@ -24,15 +24,16 @@ self.addEventListener("message", e=>{
   if (e.data && e.data.type==="VERSION" && e.source) e.source.postMessage({type:"VERSION", version:VERSION});
 });
 
-/* 通知を押したら：開いている画面があればそれをチャットに、無ければチャットを開く */
+/* 通知を押したら：開いている画面があればそれをチャット（物件の通知なら物件）に、無ければ開く */
 self.addEventListener("notificationclick", e=>{
   e.notification.close();
   e.waitUntil((async()=>{
     const all=await self.clients.matchAll({type:"window", includeUncontrolled:true});
+    const tab=(e.notification.data && e.notification.data.open)==="bukken"? "bukken" : "chat";
     for (const c of all){
-      if ("focus" in c){ c.postMessage({type:"OPEN", tab:"chat"}); return c.focus(); }
+      if ("focus" in c){ c.postMessage({type:"OPEN", tab}); return c.focus(); }
     }
-    if (self.clients.openWindow) return self.clients.openWindow("./?open=chat");
+    if (self.clients.openWindow) return self.clients.openWindow("./?open="+tab);
   })());
 });
 
